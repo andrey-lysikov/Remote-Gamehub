@@ -1055,6 +1055,10 @@ internal sealed class StreamSession : IDisposable
             }
 
             var cardShownAt = clock.Elapsed;
+
+            // Whether the card, set to Always, has been said to stand over a waiting window. Once
+            // per window, not per frame.
+            var windowUnderCardSaid = false;
             var frameInterval = TimeSpan.FromSeconds(1.0 / Math.Max(1, _negotiation.Fps));
 
             // One interval ahead, so that the first turn of the loop waits for a picture rather
@@ -1280,6 +1284,16 @@ internal sealed class StreamSession : IDisposable
                     }
                     else
                     {
+                        // Always keeps the card over the window, as it was set to; said in the log,
+                        // since a store's update behind the card looks like a game that never starts.
+                        var windowWaiting = _splash == SplashMode.Always && _windowWaiting();
+                        if (windowWaiting && !windowUnderCardSaid)
+                        {
+                            Log.Info($"a window waits in front of \"{_gameTitle}\", but this game's " +
+                                     "starting card is set to Always, so the card stays over it");
+                        }
+                        windowUnderCardSaid = windowWaiting;
+
                         card.Update();
                     }
                 }

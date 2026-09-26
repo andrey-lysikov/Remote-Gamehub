@@ -67,6 +67,17 @@ internal sealed class ClientInput
     // Modifier keys this side is holding down because a client event said to.
     private byte _heldModifiers;
 
+    // Every key this side has pressed and not yet released, modifiers included: let go of when the
+    // stream ends, since a client that drops mid-press never sends the release.
+    private readonly HashSet<ushort> _heldKeys = new();
+
+    // The mouse buttons held the same way, one bit per protocol button number (1 to 5).
+    private byte _heldButtons;
+
+    // Taken around every key and button event, from the network thread and the repeat thread alike.
+    // Without it a repeat could be typed just after the release it raced with, and the key stayed down.
+    private readonly object _keyLock = new();
+
     // The key being held, typed again while it is. See RepeatHeldKeys.
     private readonly Thread _repeatThread;
     private readonly AutoResetEvent _repeatChanged = new(false);
@@ -107,12 +118,17 @@ internal sealed class ClientInput
         _repeatThread.Start();
     }
 
-    // The stream is over. Only the repeat has to be stopped: a key still repeating into a desktop
-    // nobody is watching is a key stuck down.
+    // The stream is over. The repeat is stopped and every key still down is let go of, both by the
+    // repeat thread as it leaves: it is the one bound to the input desktop, and the caller may be a
+    // thread with windows of its own, which SetThreadDesktop refuses to move.
     internal void Release()
     {
-        _repeatKey = 0;
-        _repeating = false;
+        lock (_keyLock)
+        {
+            _repeatKey = 0;
+            _repeating = false;
+        }
+
         _repeatChanged.Set();
 
         // Disposed only once the thread is known to be gone: a wait on a disposed event throws on
@@ -219,24 +235,69 @@ internal sealed class ClientInput
         var keyCode = (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(body[1..]) & 0x00FF);
         var modifiers = body[3];
 
-        if (IsModifier(keyCode))
+        lock (_keyLock)
         {
-            // A modifier key of its own: track it, so that the synthesis below does not press a
-            // key the client is already holding.
-            var bit = ModifierBitOf(keyCode);
-            if (down) _heldModifiers |= bit;
-            else _heldModifiers &= (byte)~bit;
+            // Released already: a press arriving now would be one nothing lets go of.
+            if (!_repeating) return;
 
-            Send(KeyEvent(keyCode, down));
-            return;
+            Track(keyCode, down);
+
+            if (IsModifier(keyCode))
+            {
+                // A modifier key of its own: track it, so that the synthesis below does not press
+                // a key the client is already holding.
+                var bit = ModifierBitOf(keyCode);
+                if (down) _heldModifiers |= bit;
+                else _heldModifiers &= (byte)~bit;
+
+                Send(KeyEvent(keyCode, down));
+                return;
+            }
+
+            // The repeat is stopped before the release is typed, not after, and under the same
+            // lock the repeat thread types with: no repeat can land after the release.
+            if (!down && keyCode == _repeatKey) StopRepeating();
+
+            Press(keyCode, modifiers, down);
+
+            // Windows repeats a held key in the keyboard's own hardware, which SendInput does not
+            // imitate: a key held down on the client would otherwise arrive once.
+            if (down) RepeatFrom(keyCode, modifiers);
+        }
+    }
+
+    private void Track(ushort keyCode, bool down)
+    {
+        if (down) _heldKeys.Add(keyCode);
+        else _heldKeys.Remove(keyCode);
+    }
+
+    // Lets go of every key and mouse button still down. Called with the lock held, on the repeat
+    // thread.
+    private void ReleaseHeldKeys()
+    {
+        var buttons = System.Numerics.BitOperations.PopCount(_heldButtons);
+        if (_heldKeys.Count == 0 && buttons == 0) return;
+
+        Span<InputRecord> events = stackalloc InputRecord[_heldKeys.Count + buttons];
+        var count = 0;
+        foreach (var keyCode in _heldKeys) events[count++] = KeyEvent(keyCode, down: false);
+
+        for (byte button = 1; button <= 5; button++)
+        {
+            if ((_heldButtons & (1 << button)) != 0 && ButtonEvent(button, down: false) is { } record)
+                events[count++] = record;
         }
 
-        Press(keyCode, modifiers, down);
+        Log.Input($"the stream ended with {_heldKeys.Count} key(s) and {buttons} mouse button(s) " +
+                  "held; they are released");
 
-        // Windows repeats a held key in the keyboard's own hardware, which SendInput does not
-        // imitate: a key held down on the client would otherwise arrive once.
-        if (down) RepeatFrom(keyCode, modifiers);
-        else if (keyCode == _repeatKey) StopRepeating();
+        _heldKeys.Clear();
+        _heldModifiers = 0;
+        _heldButtons = 0;
+
+        InputDesktop.Attach(force: true);
+        Send(events[..count]);
     }
 
     // The key, with the modifiers the client holds and this side does not. Pressed before it and
@@ -296,12 +357,19 @@ internal sealed class ClientInput
                 // released in the meantime starts the wait over.
                 if (_repeatChanged.WaitOne(_repeatDelayMs)) continue;
 
-                while (_repeating && _repeatKey == keyCode)
+                while (true)
                 {
-                    // The desktop can change while a key is held, and a repeat typed into the old
-                    // one arrives nowhere: the key then looks stuck rather than repeating.
-                    InputDesktop.Attach();
-                    Press(keyCode, _repeatModifiers, down: true);
+                    lock (_keyLock)
+                    {
+                        // Looked at under the lock the release is typed under, so a repeat is
+                        // either typed before the release or not at all.
+                        if (!_repeating || _repeatKey != keyCode) break;
+
+                        // The desktop can change while a key is held, and a repeat typed into the
+                        // old one arrives nowhere: the key then looks stuck rather than repeating.
+                        InputDesktop.Attach();
+                        Press(keyCode, _repeatModifiers, down: true);
+                    }
 
                     if (_repeatChanged.WaitOne(_repeatIntervalMs)) break;
                 }
@@ -309,6 +377,7 @@ internal sealed class ClientInput
         }
         finally
         {
+            lock (_keyLock) ReleaseHeldKeys();
             InputDesktop.Detach();
         }
     }
@@ -502,10 +571,34 @@ internal sealed class ClientInput
 
         if (down) Pressed?.Invoke();
 
+        var button = body[0];
+        if (ButtonEvent(button, down) is not { } record)
+        {
+            Log.Input($"mouse button {button} is not one this machine has");
+            return;
+        }
+
+        lock (_keyLock)
+        {
+            // Released already, as for keys: a press now would be one nothing lets go of.
+            if (!_repeating) return;
+
+            var bit = (byte)(1 << button);
+            if (down) _heldButtons |= bit;
+            else _heldButtons &= (byte)~bit;
+
+            Send(record);
+        }
+    }
+
+    // One button event, by the protocol's numbering: 1 left, 2 middle, 3 right, 4 and 5 the two
+    // side buttons. null for a number this machine has no button for.
+    private static InputRecord? ButtonEvent(byte button, bool down)
+    {
         uint flags;
         uint data = 0;
 
-        switch (body[0])
+        switch (button)
         {
             case 1: flags = down ? User32.MOUSEEVENTF_LEFTDOWN : User32.MOUSEEVENTF_LEFTUP; break;
             case 2: flags = down ? User32.MOUSEEVENTF_MIDDLEDOWN : User32.MOUSEEVENTF_MIDDLEUP; break;
@@ -519,16 +612,15 @@ internal sealed class ClientInput
                 data = User32.XBUTTON2;
                 break;
             default:
-                Log.Input($"mouse button {body[0]} is not one this machine has");
-                return;
+                return null;
         }
 
-        Send(new InputRecord
+        return new InputRecord
         {
             Type = User32.INPUT_MOUSE,
             MouseFlags = flags,
             MouseData = data,
-        });
+        };
     }
 
     // The wheel. The protocol counts in the same units Windows does — 120 to a notch — so the

@@ -42,6 +42,23 @@ internal sealed class GameLibrary
 
     internal GameLibrary(Database database) => _database = database;
 
+    // The moment the last scan was stamped with. See NextScanMoment.
+    private DateTimeOffset _lastScan;
+
+    // Now, or a millisecond past the last scan when that is not later. The stamp is kept to the
+    // millisecond, and two scans inside one used to share it: the second then took every row the
+    // first had stamped for one of its own, and a game gone in between was never marked gone.
+    // Called under the database gate.
+    private DateTimeOffset NextScanMoment()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var floor = _lastScan.AddMilliseconds(1);
+        if (now < floor) now = floor;
+
+        _lastScan = now;
+        return now;
+    }
+
     // Scans every source and makes the table match what was found. first_seen_at survives the
     // rescan; rows the scan did not touch are marked gone, not deleted, and wait KeepRemoved.
     internal void Rescan(AppConfig config)
@@ -138,10 +155,6 @@ internal sealed class GameLibrary
                 : $"{games.Count} new of {scanned} from {name}");
         }
 
-        // One stamp for the whole scan, so that "touched by this scan" is an equality test. The
-        // deletion below removes every row carrying any other stamp.
-        var stamp = Stamp(DateTimeOffset.UtcNow);
-
         // Manual rows no scanner met. Whether they are gone is asked of the file system, and only
         // where there is something to ask about: a steam:// or shell: command is kept instead.
         var manualGone = manual
@@ -151,6 +164,10 @@ internal sealed class GameLibrary
 
         lock (_database.Gate)
         {
+            // One stamp for the whole scan, so that "touched by this scan" is an equality test. The
+            // sweep below marks gone every row carrying any other stamp.
+            var stamp = Stamp(NextScanMoment());
+
             using (var begin = _database.Command("BEGIN IMMEDIATE;")) begin.ExecuteNonQuery();
 
             try
