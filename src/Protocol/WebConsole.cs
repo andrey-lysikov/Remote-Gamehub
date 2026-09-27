@@ -239,6 +239,24 @@ internal sealed class WebConsole : IAsyncDisposable
             return;
         }
 
+        // The screen beside the log, only while something runs: a game, a program or a stream.
+        if (request.Query("screen") is not null)
+        {
+            var running = _sessions.CurrentAppId != 0;
+            var shot = running ? ScreenSnapshot.Take(_config) : null;
+
+            if (shot is null)
+            {
+                await WriteAsync(stream, 200, "text/plain", running
+                    ? Text.T("The screen cannot be captured right now.")
+                    : Text.T("Nothing is running."));
+                return;
+            }
+
+            await HttpResponse.WriteImageAsync(stream, shot, "image/jpeg", _stopping.Token);
+            return;
+        }
+
         if (request.Query("log") is not null)
         {
             await WriteAsync(stream, 200, "text/plain", ReadLogTail());

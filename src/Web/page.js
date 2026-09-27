@@ -43,9 +43,21 @@ if((await (await fetch('/?autologon=state')).text()).trim()==='on'){clearInterva
 al.innerHTML='<p>[[Automatic sign-in is on now. This host comes back on its own after a restart.]]</p>';}
 },5000);});}
 
-const logbox=$('logbox'),log=$('log');
+const logbox=$('logbox'),log=$('log'),shot=$('shot'),shotimg=$('shotimg'),shotsaid=$('shotsaid');
+let shotUrl='';
+async function refreshShot(){
+if(!logbox.classList.contains('open')&&!shot.classList.contains('full'))return;
+try{const r=await fetch('/?screen=1&v='+Date.now());
+if((r.headers.get('Content-Type')||'').startsWith('image/')){const url=URL.createObjectURL(await r.blob());
+shotimg.onload=()=>{if(shotUrl)URL.revokeObjectURL(shotUrl);shotUrl=url;};shotimg.src=url;shot.classList.add('has');}
+else{shot.classList.remove('has','full');shotsaid.textContent=await r.text();}}catch{}}
+setInterval(refreshShot,5000);
+shot.addEventListener('click',e=>{
+if(e.target.id==='shotclose'){shot.classList.remove('full');return;}
+if(shot.classList.contains('has'))shot.classList.add('full');});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')shot.classList.remove('full');});
 $('logtoggle').addEventListener('click',()=>{logbox.classList.toggle('open');
-if(logbox.classList.contains('open'))log.scrollTop=log.scrollHeight;});
+if(logbox.classList.contains('open')){log.scrollTop=log.scrollHeight;refreshShot();}});
 setInterval(async()=>{if(!logbox.classList.contains('open'))return;
 const atEnd=log.scrollTop+log.clientHeight>=log.scrollHeight-8;
 log.textContent=await (await fetch('/?log=1')).text();
