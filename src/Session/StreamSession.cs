@@ -41,6 +41,11 @@ internal sealed class SessionManager : IDisposable
     private StreamSession? _session;
     private GameWatcher? _watcher;
 
+    // The one program without a stream, and whether the launch waiting to be negotiated is its notice.
+    private HostProgram? _program;
+    private bool _pendingNotice;
+    private readonly string _programLogs;
+
     // The machine's sound moved onto a device that can carry what the client asked for, held here
     // rather than in the session: it is applied before the game starts, which is before there is one.
     private AudioAdaptation? _audio;
@@ -51,7 +56,7 @@ internal sealed class SessionManager : IDisposable
 
     internal SessionManager(AppConfig config, DisplayOutput output, EncoderCapabilities encoder,
                             GameLibrary games, GamepadHub gamepads, TrayIcon tray,
-                            SessionWatch sessionWatch, ScaleStore scales)
+                            SessionWatch sessionWatch, ScaleStore scales, string directory)
     {
         _config = config;
         _output = output;
@@ -61,6 +66,135 @@ internal sealed class SessionManager : IDisposable
         _tray = tray;
         _sessionWatch = sessionWatch;
         _scales = scales;
+        _programLogs = Path.Combine(directory, "programs");
+
+        AdoptProgram();
+    }
+
+    // A program a previous worker started is still this server's to show and to stop.
+    private void AdoptProgram()
+    {
+        var record = _games.RunningProgram();
+        if (record is null) return;
+
+        var target = _games.Target(record.GameId);
+        var program = target is { NoStream: true }
+            ? HostProgram.Adopt(record, _games.ClientIdFor(record.GameId), target.Title, ProgramFinished)
+            : null;
+
+        if (program is null || !program.IsRunning)
+        {
+            program?.Dispose();
+            _games.RecordRunningProgram(null);
+            return;
+        }
+
+        lock (_gate) _program = program;
+    }
+
+    // The program's row when a client's number names one without a stream, else null.
+    private (long GameId, LaunchTarget Target)? ProgramFor(int appId)
+    {
+        if (appId == AppParameters.Protocol.DesktopAppId) return null;
+
+        var gameId = _games.GameIdForClient(appId);
+        var target = gameId > 0 ? _games.Target(gameId) : null;
+        return target is { NoStream: true } ? (gameId, target) : null;
+    }
+
+    // Started from the page: nothing is streamed. Refused while a game or a stream holds the machine.
+    internal bool StartProgram(long gameId, out string refusal)
+    {
+        var target = _games.Target(gameId);
+        if (target is not { NoStream: true })
+        {
+            refusal = Text.T("this entry is not a program without a stream.");
+            return false;
+        }
+
+        lock (_gate)
+        {
+            if (_session is not null || _pending is not null)
+            {
+                refusal = Text.T("a client is streaming from this machine; stop it first.");
+                return false;
+            }
+
+            if (_watcher is { IsRunning: true })
+            {
+                refusal = Text.T("a game is running; stop it first.");
+                return false;
+            }
+        }
+
+        return RunProgram(gameId, target, out refusal);
+    }
+
+    // Starts the program unless it already runs; any other program is stopped first.
+    private bool RunProgram(long gameId, LaunchTarget target, out string refusal)
+    {
+        refusal = string.Empty;
+
+        HostProgram? previous;
+        lock (_gate)
+        {
+            if (_program is { IsRunning: true } same && same.GameId == gameId) return true;
+            previous = _program;
+            _program = null;
+        }
+
+        previous?.Stop();
+        previous?.Dispose();
+
+        var program = HostProgram.Start(gameId, _games.ClientIdFor(gameId), target, _programLogs,
+                                        ProgramFinished);
+        if (program is null || !program.IsRunning)
+        {
+            program?.Dispose();
+            refusal = Text.T("\"{0}\" could not be started or closed at once; the log says why.", target.Title);
+            return false;
+        }
+
+        lock (_gate) _program = program;
+        _games.RecordRunningProgram(new RunningProgramRecord(gameId, program.ProcessId, program.StartedAt));
+        return true;
+    }
+
+    private void StopProgram()
+    {
+        HostProgram? program;
+        lock (_gate)
+        {
+            program = _program;
+            _program = null;
+        }
+
+        if (program is null) return;
+
+        program.Stop();
+        program.Dispose();
+    }
+
+    // The program ended, on its own or stopped: it is no longer the machine's current application.
+    private void ProgramFinished(long gameId)
+    {
+        HostProgram? gone = null;
+        bool nothingRuns;
+        lock (_gate)
+        {
+            if (_program?.GameId == gameId)
+            {
+                gone = _program;
+                _program = null;
+            }
+
+            nothingRuns = _program is null;
+        }
+
+        // Not when another program has just replaced this one: its record must stay.
+        if (nothingRuns) _games.RecordRunningProgram(null);
+
+        if (gone is not null) Log.Info($"\"{gone.Title}\" is no longer running");
     }
 
     // The application identifier /serverinfo reports, which is how a client chooses between Start
@@ -71,6 +205,7 @@ internal sealed class SessionManager : IDisposable
         {
             lock (_gate)
             {
+                if (_program is { IsRunning: true }) return _program.AppId;
                 if (_watcher is { IsRunning: true }) return _watcher.AppId;
                 return _session?.AppId ?? 0;
             }
@@ -104,6 +239,7 @@ internal sealed class SessionManager : IDisposable
     {
         _pending = null;
         _pendingFor = null;
+        _pendingNotice = false;
     }
 
     // What is happening right now, in the words the status page uses. Under the same lock as the
@@ -129,6 +265,9 @@ internal sealed class SessionManager : IDisposable
     {
         refusal = string.Empty;
 
+        if (ProgramFor(request.AppId) is { } program)
+            return LaunchProgram(request, from, program.GameId, program.Target, out refusal);
+
         if (!_encoder.CanStream)
         {
             refusal = _encoder.Refusal ?? "no encoder is available.";
@@ -139,13 +278,16 @@ internal sealed class SessionManager : IDisposable
         {
             if (_session is not null)
             {
-                refusal = "another client is already streaming from this machine.";
+                refusal = Text.T("another client is already streaming from this machine.");
                 return false;
             }
 
             _pending = request;
             _pendingFor = from;
         }
+
+        // One application at a time: a game or the desktop takes the machine from the program.
+        StopProgram();
 
         // Before anything arranged for the picture: until this there is none, and the mode set
         // below would go to the remote display rather than to the screen that ends up streamed.
@@ -159,7 +301,7 @@ internal sealed class SessionManager : IDisposable
         if (request.AppId != AppParameters.Protocol.DesktopAppId && !StartApplication(request.AppId))
         {
             lock (_gate) Forget();
-            refusal = "that application could not be started.";
+            refusal = Text.T("that application could not be started.");
             return false;
         }
 
@@ -168,11 +310,98 @@ internal sealed class SessionManager : IDisposable
         return true;
     }
 
+    // A program without a stream: started here, then only a short notice is streamed. The screen,
+    // the sound and a remote desktop session are left as they are.
+    private bool LaunchProgram(LaunchRequest request, IPAddress? from, long gameId, LaunchTarget target,
+                               out string refusal)
+    {
+        lock (_gate)
+        {
+            if (_session is not null)
+            {
+                refusal = Text.T("another client is already streaming from this machine.");
+                return false;
+            }
+
+            if (_watcher is { IsRunning: true })
+            {
+                refusal = Text.T("a game is running; quit it first.");
+                return false;
+            }
+        }
+
+        if (!RunProgram(gameId, target, out refusal)) return false;
+
+        // No encoder, no notice: the refusal is the message, and the program runs regardless.
+        if (!_encoder.CanStream)
+        {
+            refusal = Text.T("\"{0}\" is running on the host.", target.Title);
+            return false;
+        }
+
+        if (AwaitNotice(request, from)) return true;
+
+        refusal = Text.T("\"{0}\" closed as soon as it started; the log says why.", target.Title);
+        return false;
+    }
+
+    // The notice's session: the program's title and cover, streamed from no screen at all.
+    private void StartNotice(LaunchRequest request, StreamNegotiation negotiation)
+    {
+        HostProgram? program;
+        lock (_gate) program = _program;
+
+        var title = program?.Title ?? "Program";
+        var poster = program is null ? null : _games.BoxArtPath(program.GameId);
+
+        try
+        {
+            var session = new StreamSession(_config, _output, _encoder, _gamepads, _tray, _scales,
+                request, negotiation, Ended, title, poster, notice: Text.T("{0} is running on the host", title));
+
+            lock (_gate)
+            {
+                _session = session;
+                Forget();
+            }
+
+            session.Start();
+        }
+        catch (Exception error)
+        {
+            Log.Error("the notice could not be streamed", error);
+            lock (_gate)
+            {
+                _session?.Dispose();
+                _session = null;
+                Forget();
+            }
+            _tray.SetState("waiting for a client");
+        }
+    }
+
+    // Holds the launch or resume for the negotiation that follows, marked as a notice.
+    private bool AwaitNotice(LaunchRequest request, IPAddress? from)
+    {
+        lock (_gate)
+        {
+            if (_program is not { IsRunning: true } program) return false;
+
+            _pending = request with { AppId = program.AppId };
+            _pendingFor = from;
+            _pendingNotice = true;
+        }
+
+        Log.Info("the program runs; a short notice is streamed to the client in its place");
+        return true;
+    }
+
     // Builds the session from the negotiated configuration. Called on the RTSP connection's
     // thread when an ANNOUNCE is accepted.
     internal void Negotiated(StreamNegotiation negotiation)
     {
         LaunchRequest? request;
+        bool notice;
         lock (_gate)
         {
             if (_session is not null)
@@ -183,11 +412,18 @@ internal sealed class SessionManager : IDisposable
             }
 
             request = _pending;
+            notice = _pendingNotice;
             if (request is null)
             {
                 Log.Warn("a stream was negotiated without a launch; it is ignored");
                 return;
             }
+        }
+
+        if (notice)
+        {
+            StartNotice(request, negotiation);
+            return;
         }
 
         // What the client is shown while the game loads: its own picture and its name. Gathered
@@ -327,17 +563,38 @@ internal sealed class SessionManager : IDisposable
     {
         refusal = string.Empty;
 
+        bool programRuns;
+        lock (_gate)
+        {
+            if (_session is not null)
+            {
+                refusal = Text.T("another client is already streaming from this machine.");
+                return false;
+            }
+
+            programRuns = _program is { IsRunning: true };
+        }
+
+        // Resuming a program is being told again that it runs.
+        if (programRuns)
+        {
+            if (_encoder.CanStream && AwaitNotice(request, from)) return true;
+
+            refusal = Text.T("the program is running on the host; there is no stream to resume.");
+            return false;
+        }
+
         lock (_gate)
         {
             if (_watcher is not { IsRunning: true })
             {
-                refusal = "there is nothing running to resume.";
+                refusal = Text.T("there is nothing running to resume.");
                 return false;
             }
 
             if (_session is not null)
             {
-                refusal = "another client is already streaming from this machine.";
+                refusal = Text.T("another client is already streaming from this machine.");
                 return false;
             }
 
@@ -387,6 +644,20 @@ internal sealed class SessionManager : IDisposable
     private void Stop(bool closeTheGame)
     {
         EndStream();
+
+        // A cancel ends the program too; a shutdown leaves it running for the next worker.
+        if (closeTheGame)
+        {
+            StopProgram();
+        }
+        else
+        {
+            lock (_gate)
+            {
+                _program?.Dispose();
+                _program = null;
+            }
+        }
 
         GameWatcher? watcher;
         lock (_gate)
@@ -522,16 +793,16 @@ internal sealed class SessionManager : IDisposable
             // saves, no launcher session, no settings, and several refuse to start at all.
             if (PlatformGuard.IsSystem)
             {
-                if (!SessionLauncher.StartAsConsoleUser(target.Command, workingDirectory))
+                if (!SessionLauncher.StartAsConsoleUser(target.FullCommand, workingDirectory))
                     return false;
             }
             else
             {
                 // A packaged game is addressed by a shell: path, which nothing but Explorer resolves.
                 // A quoted path with arguments after it (a launcher told which game) is split.
-                var (file, arguments) = SessionLauncher.SplitCommand(target.Command);
-                var start = target.Command.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
-                    ? new ProcessStartInfo("explorer.exe", target.Command) { UseShellExecute = true }
+                var (file, arguments) = SessionLauncher.SplitCommand(target.FullCommand);
+                var start = target.FullCommand.StartsWith("shell:", StringComparison.OrdinalIgnoreCase)
+                    ? new ProcessStartInfo("explorer.exe", target.FullCommand) { UseShellExecute = true }
                     : new ProcessStartInfo(file, arguments) { UseShellExecute = true };
 
                 if (workingDirectory is not null) start.WorkingDirectory = workingDirectory;
@@ -539,11 +810,11 @@ internal sealed class SessionManager : IDisposable
                 Process.Start(start);
             }
 
-            Log.Event($"asked the shell to start \"{target.Title}\": {target.Command}");
+            Log.Event($"asked the shell to start \"{target.Title}\": {target.FullCommand}");
         }
         catch (Exception error)
         {
-            Log.Warn($"\"{target.Command}\" could not be started: {error.Message}");
+            Log.Warn($"\"{target.FullCommand}\" could not be started: {error.Message}");
             return false;
         }
 
@@ -783,6 +1054,13 @@ internal sealed class StreamSession : IDisposable
 
     internal int AppId { get; }
 
+    // Set for a program without a stream: a card saying so, then a clean end. No capture, no sound.
+    private readonly string? _notice;
+
+    // How long the notice is shown, and how long a client may take to start receiving it.
+    private static readonly TimeSpan NoticeFor = TimeSpan.FromSeconds(1.5);
+    private static readonly TimeSpan NoticePatience = TimeSpan.FromSeconds(10);
+
     internal StreamSession(AppConfig config, DisplayOutput output, EncoderCapabilities capabilities,
                            GamepadHub gamepads, TrayIcon tray, ScaleStore scales,
                            LaunchRequest request,
@@ -792,11 +1070,13 @@ internal sealed class StreamSession : IDisposable
                            bool gamePointer = false,
                            StreamQuality gameQuality = StreamQuality.High,
                            SplashMode splash = SplashMode.Auto,
-                           DisplayAdaptation? preAdapted = null)
+                           DisplayAdaptation? preAdapted = null,
+                           string? notice = null)
     {
         _config = config;
         _output = output;
         _preAdapted = preAdapted;
+        _notice = notice;
         _scales = scales;
         _capabilities = capabilities;
         _gamepads = gamepads;
@@ -826,12 +1106,12 @@ internal sealed class StreamSession : IDisposable
         _control = new ControlStream(config.ControlPort, config.BindAddress, request.RiKey);
         _input = new ClientInput(output.Bounds, gamepads);
 
-        _audio = AppParameters.Audio.Enabled
+        _audio = AppParameters.Audio.Enabled && notice is null
             ? new AudioStream(config.AudioPort, config.BindAddress, AppParameters.Audio.Device,
                               negotiation, request.RiKey, request.RiKeyId)
             : null;
 
-        _control.InputReceived += payload => _input.Handle(payload);
+        if (notice is null) _control.InputReceived += payload => _input.Handle(payload);
 
         // A deliberate press means the player wants to see the machine, whatever is loading.
         _input.Pressed += () => _cardDismissed = true;
@@ -915,6 +1195,12 @@ internal sealed class StreamSession : IDisposable
 
         try
         {
+            if (_notice is not null)
+            {
+                SendNotice();
+                return;
+            }
+
             // HDR only when the client asked and the card/codec (HEVC or AV1) can send ten bits;
             // whether the screen really is in HDR is for the capture below to answer.
             var hdr = _negotiation.HdrRequested &&
@@ -1392,6 +1678,94 @@ internal sealed class StreamSession : IDisposable
             // itself to for the capture: both are this thread's own and go with it.
             Kernel32.SetThreadExecutionState(Kernel32.ES_CONTINUOUS);
             InputDesktop.Detach();
+        }
+    }
+
+    // The whole stream of a program without one: the card on a device of its own, encoded for
+    // NoticeFor once the client listens, then a clean end so the client returns to its list.
+    private unsafe void SendNotice()
+    {
+        void* adapter = null;
+        void* device = null;
+        void* context = null;
+        StartingCard? card = null;
+        IVideoEncoder? encoder = null;
+
+        try
+        {
+            var factory = Dxgi.CreateFactory();
+            try
+            {
+                Com.Check(Dxgi.EnumAdapters1(factory, (uint)_output.AdapterIndex, out adapter),
+                    $"IDXGIFactory1::EnumAdapters1({_output.AdapterIndex})");
+            }
+            finally
+            {
+                Com.Release(factory);
+            }
+
+            D3D11.CreateDevice(adapter, out device, out context, out _);
+
+            var width = _negotiation.Width;
+            var height = _negotiation.Height;
+
+            card = StartingCard.Create((nint)device, (nint)context, width, height,
+                       Dxgi.DXGI_FORMAT_B8G8R8A8_UNORM, _gameTitle ?? "Program", _posterPath, _notice)
+                   ?? throw new InvalidOperationException("the notice could not be drawn");
+
+            encoder = VideoEncoders.Open((nint)device, _capabilities, _negotiation.Codec, width, height,
+                _negotiation.BitrateKbps, _negotiation.Fps, hdr: false, yuv444: _negotiation.Yuv444,
+                quality: _quality);
+
+            SentWidth = width;
+            SentHeight = height;
+
+            var clock = Stopwatch.StartNew();
+            var interval = TimeSpan.FromSeconds(1.0 / Math.Max(1, _negotiation.Fps));
+            var nextFrame = interval;
+            var firstSent = TimeSpan.MinValue;
+            uint frameIndex = 0;
+
+            while (_running)
+            {
+                var wait = nextFrame - clock.Elapsed;
+                if (wait > TimeSpan.Zero) Thread.Sleep(wait);
+                nextFrame += interval;
+
+                if (!_video.HasPeer)
+                {
+                    if (clock.Elapsed < NoticePatience) continue;
+
+                    _ended("the client never started receiving the notice");
+                    return;
+                }
+
+                var keyFrame = _keyFrameWanted;
+                _keyFrameWanted = false;
+
+                var unit = encoder.Encode(card.Texture, keyFrame);
+                if (unit.IsEmpty) continue;
+
+                frameIndex++;
+                _video.SendFrame(unit.Span, keyFrame, frameIndex,
+                    (uint)(clock.Elapsed.TotalSeconds * RtpClockHz));
+
+                if (firstSent == TimeSpan.MinValue) firstSent = clock.Elapsed;
+
+                if (clock.Elapsed - firstSent >= NoticeFor)
+                {
+                    _ended("the program runs on the host without a stream");
+                    return;
+                }
+            }
+        }
+        finally
+        {
+            card?.Dispose();
+            encoder?.Dispose();
+            Com.ReleaseAndClear(ref context);
+            Com.ReleaseAndClear(ref device);
+            Com.ReleaseAndClear(ref adapter);
         }
     }
 

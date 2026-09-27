@@ -118,9 +118,8 @@ internal sealed class ClientInput
         _repeatThread.Start();
     }
 
-    // The stream is over. The repeat is stopped and every key still down is let go of, both by the
-    // repeat thread as it leaves: it is the one bound to the input desktop, and the caller may be a
-    // thread with windows of its own, which SetThreadDesktop refuses to move.
+    // Stream over: the repeat thread stops and releases held keys itself, since only it is bound
+    // to the input desktop (SetThreadDesktop refuses a caller that owns windows).
     internal void Release()
     {
         lock (_keyLock)

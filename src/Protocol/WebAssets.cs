@@ -21,7 +21,7 @@ internal static partial class WebAssets
     private static partial Regex Slot { get; }
 
     private static readonly Lazy<string> StyleText = new(() => Read("page.css"));
-    private static readonly Lazy<string> ScriptText = new(() => Read("page.js"));
+    private static readonly Lazy<string> ScriptText = new(() => Text.Translate(Read("page.js")));
     private static readonly Lazy<Dictionary<string, string>> PageParts = new(ReadParts);
 
     internal static string Style => StyleText.Value;
@@ -60,7 +60,7 @@ internal static partial class WebAssets
 
     private static Dictionary<string, string> ReadParts()
     {
-        var text = Read("page.html");
+        var text = Text.Translate(Read("page.html"));
         var parts = new Dictionary<string, string>(StringComparer.Ordinal);
         var markers = PartMarker.Matches(text);
 

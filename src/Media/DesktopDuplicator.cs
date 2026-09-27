@@ -112,11 +112,10 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
     // numbers when the screen answers nothing, which is every screen that does no HDR.
     internal HdrDisplay Hdr { get; private set; } = HdrDisplay.Rec2020;
 
-    // The texture the encoder reads: the raw capture for an HDR desktop (the shader composites
-    // the pointer from CursorOverlay instead), or the copy with the pointer drawn in otherwise.
-    // Whether a pointer this duplicator could draw is left out of the frames for the moment.
+    // Leaves the pointer out of the frames for now.
     internal bool PointerSuppressed { get; set; }
 
+    // What the encoder reads: raw capture for HDR (shader adds the pointer), else the copy with it.
     internal nint FrameTexture => !IsHdrDesktop && _pointerDrawn ? (nint)_composed : (nint)_frame;
 
     // The pointer, on its own, for the colour shader to blend onto the picture it converts. Zero

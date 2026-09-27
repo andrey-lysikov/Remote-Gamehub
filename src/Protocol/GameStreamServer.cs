@@ -574,11 +574,11 @@ internal sealed class GameStreamServer : IAsyncDisposable
     {
         var launch = ReadLaunchRequest(request);
         if (launch is null)
-            return LaunchRefused(400, "The launch request is missing or malforming a parameter " +
-                                      "this server needs.");
+            return LaunchRefused(400, Text.T("The launch request is missing or malforming a parameter " +
+                                             "this server needs."));
 
         if (!_sessions.Launch(launch, from, out var refusal))
-            return LaunchRefused(503, $"This server cannot start the stream: {refusal}");
+            return LaunchRefused(503, Text.T("This server cannot start the stream: {0}", refusal));
 
         return BuildDocument(xml =>
         {
@@ -682,7 +682,7 @@ internal sealed class GameStreamServer : IAsyncDisposable
             {
                 xml.WriteElementString("resume", "0");
                 xml.WriteElementString("status_message",
-                    "The resume request is missing a parameter this server needs.");
+                    Text.T("The resume request is missing a parameter this server needs."));
             }, 400);
         }
 
@@ -691,7 +691,7 @@ internal sealed class GameStreamServer : IAsyncDisposable
             return BuildDocument(xml =>
             {
                 xml.WriteElementString("resume", "0");
-                xml.WriteElementString("status_message", $"This stream cannot be resumed: {refusal}");
+                xml.WriteElementString("status_message", Text.T("This stream cannot be resumed: {0}", refusal));
             }, 503);
         }
 

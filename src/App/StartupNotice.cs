@@ -15,17 +15,17 @@ internal static class StartupNotice
     // person who would answer it is not at this machine.
     internal static void Show(string reason)
     {
-        var headline = reason.Replace("\r\n", "\n").Split('\n')[0].Trim();
+        var headline = Text.T(reason.Replace("\r\n", "\n").Split('\n')[0].Trim());
 
         try
         {
             using var tray = new TrayIcon();
             tray.SetState("not started");
             tray.Notify(
-                $"{AppParameters.Identity.DisplayName} did not start",
+                Text.T("{0} did not start", AppParameters.Identity.DisplayName),
                 Log.Path is null
                     ? headline
-                    : $"{headline}\nThe full reason is in {Log.Path}.",
+                    : headline + "\n" + Text.T("The full reason is in {0}.", Log.Path),
                 isError: true);
 
             // The balloon is drawn by the shell on this thread's message queue, so the queue has

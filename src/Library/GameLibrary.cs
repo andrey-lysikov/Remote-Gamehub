@@ -28,7 +28,15 @@ internal sealed record ArtworkCandidate(long Id, string Source, string? External
 // Everything needed to start one game and to recognise it afterwards.
 internal sealed record LaunchTarget(string Command, string? InstallPath, string Title,
                                     bool Pointer, StreamQuality Quality, SplashMode Splash,
-                                    string? WorkingDirectory = null);
+                                    string? WorkingDirectory = null, string? Arguments = null,
+                                    bool NoStream = false)
+{
+    // The command with its extra arguments, as it is started.
+    internal string FullCommand => string.IsNullOrWhiteSpace(Arguments) ? Command : $"{Command} {Arguments.Trim()}";
+}
+
+// The program without a stream that was running, as recorded for a restarted worker.
+internal sealed record RunningProgramRecord(long GameId, int ProcessId, DateTime StartedAt);
 
 // The games this machine has, as of the last scan: once at every start, after preflight, and again
 // only when somebody asks for it. Between scans the database is truth.
@@ -45,9 +53,7 @@ internal sealed class GameLibrary
     // The moment the last scan was stamped with. See NextScanMoment.
     private DateTimeOffset _lastScan;
 
-    // Now, or a millisecond past the last scan when that is not later. The stamp is kept to the
-    // millisecond, and two scans inside one used to share it: the second then took every row the
-    // first had stamped for one of its own, and a game gone in between was never marked gone.
+    // Now, but always after the last scan, so two scans in one millisecond never share a stamp.
     // Called under the database gate.
     private DateTimeOffset NextScanMoment()
     {
@@ -343,11 +349,8 @@ internal sealed class GameLibrary
         command.ExecuteNonQuery();
     }
 
-    // Everything /applist serves, ordered by title, each with the number the client is to know it
-    // by. Those numbers are brought up to date here, and only here: a client learns a new one from
-    // this list, so it must never change between the list and the launch or cover asked for from
-    // it. running is the client number of the game streaming now, kept as it is while it runs, or
-    // /serverinfo would name a game the list no longer has.
+    // The /applist games by title; the only place client ids are updated. The running game keeps
+    // its id while it streams, or /serverinfo would name a game missing from the list.
     internal IReadOnlyList<ListedGame> List(int running = 0)
     {
         var games = new List<ListedGame>();
@@ -441,9 +444,8 @@ internal sealed class GameLibrary
         }
     }
 
-    // What the client number is worked out from, cheaply: the title, and the cover by path, size
-    // and write time. A cover replaced at the same path changes the last two, and only when this
-    // changes is the file read and hashed again.
+    // Cheap stand-in for the client id inputs: title plus cover path, size and write time.
+    // The cover is hashed again only when this changes.
     private static string ClientKey(string title, string? art)
     {
         if (string.IsNullOrEmpty(art)) return title;
@@ -454,10 +456,8 @@ internal sealed class GameLibrary
             : $"{title}\n{art}";
     }
 
-    // Sunshine's calculate_app_id: CRC32 of the title followed by the cover's SHA-256 (its path if
-    // the file cannot be read), cut to a positive 32-bit number, as clients keep it in an int. The
-    // second is the first with an index added, for when two games meet; ours is the row id, which
-    // unlike a position in the list does not move when a game is added before it.
+    // Sunshine's calculate_app_id: positive CRC32 of title + cover SHA-256 (or path). Indexed
+    // mixes in the row id, which stays stable, for collisions.
     internal static (int Plain, int Indexed) ClientIds(long rowId, string title, string? art)
     {
         var text = new StringBuilder(title);
@@ -637,7 +637,8 @@ internal sealed class GameLibrary
     // when there is none: the page hangs it on the cover's address so a new one is fetched.
     internal sealed record GameDetail(long Id, string Source, string Title, string LaunchCommand,
                                       string? InstallPath, long ArtStamp, bool Manual, bool ArtManual,
-                                      bool Pointer, StreamQuality Quality, SplashMode Splash);
+                                      bool Pointer, StreamQuality Quality, SplashMode Splash,
+                                      string? Arguments = null, bool NoStream = false);
 
     internal IReadOnlyList<GameDetail> Details()
     {
@@ -647,8 +648,8 @@ internal sealed class GameLibrary
         {
             using var command = _database.Command(
                 "SELECT id, source, title, launch_command, install_path, box_art_path, manual, " +
-                "art_manual, pointer, quality, starting_card FROM games WHERE removed_at IS NULL " +
-                "ORDER BY title COLLATE NOCASE;");
+                "art_manual, pointer, quality, starting_card, arguments, no_stream FROM games " +
+                "WHERE removed_at IS NULL ORDER BY title COLLATE NOCASE;");
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
@@ -664,7 +665,9 @@ internal sealed class GameLibrary
                     reader.GetInt64(7) != 0,
                     reader.GetInt64(8) != 0,
                     Quality(reader.GetInt64(9)),
-                    Splash(reader.GetInt64(10))));
+                    Splash(reader.GetInt64(10)),
+                    reader.IsDBNull(11) ? null : reader.GetString(11),
+                    reader.GetInt64(12) != 0));
             }
         }
 
@@ -683,10 +686,12 @@ internal sealed class GameLibrary
 
     // Adds a game a person described, or changes one. Either way the row becomes theirs and the
     // scan leaves it alone: an edit is a statement that the scanner got something wrong.
-    internal long Save(long id, string title, string launchCommand, string? folder)
+    internal long Save(long id, string title, string launchCommand, string? folder,
+                       string? arguments = null, bool noStream = false)
     {
         var now = Stamp(DateTimeOffset.UtcNow);
         var install = string.IsNullOrWhiteSpace(folder) ? null : folder.Trim();
+        var extra = string.IsNullOrWhiteSpace(arguments) ? null : arguments.Trim();
 
         lock (_database.Gate)
         {
@@ -695,7 +700,8 @@ internal sealed class GameLibrary
                 // The switches are not an edit of what the scan found: with name, command and folder
                 // unchanged the game stays the scanner's, or a quality change would freeze it.
                 using (var current = _database.Command(
-                           "SELECT title, launch_command, install_path, removed_at FROM games WHERE id = $id;"))
+                           "SELECT title, launch_command, install_path, removed_at, arguments, no_stream " +
+                           "FROM games WHERE id = $id;"))
                 {
                     current.Parameters.AddWithValue("$id", id);
                     using var reader = current.ExecuteReader();
@@ -704,7 +710,9 @@ internal sealed class GameLibrary
                         reader.GetString(0) == title &&
                         reader.GetString(1) == launchCommand &&
                         (reader.IsDBNull(2) ? null : reader.GetString(2)) == install &&
-                        reader.IsDBNull(3))
+                        reader.IsDBNull(3) &&
+                        (reader.IsDBNull(4) ? null : reader.GetString(4)) == extra &&
+                        (reader.GetInt64(5) != 0) == noStream)
                     {
                         return id;
                     }
@@ -715,6 +723,7 @@ internal sealed class GameLibrary
                     // Editing a game that had gone is how somebody says it is back — the row is
                     // still there for four months precisely so that this works.
                     "install_path = $install, manual = 1, removed_at = NULL, " +
+                    "arguments = $arguments, no_stream = $nostream, " +
                     // The store's starting folder belongs to the store's install folder: kept
                     // while that is, forgotten when somebody names a different one.
                     "working_dir = CASE WHEN install_path IS $install THEN working_dir END, " +
@@ -723,6 +732,8 @@ internal sealed class GameLibrary
                 update.Parameters.AddWithValue("$title", title);
                 update.Parameters.AddWithValue("$launch", launchCommand);
                 update.Parameters.AddWithValue("$install", (object?)install ?? DBNull.Value);
+                update.Parameters.AddWithValue("$arguments", (object?)extra ?? DBNull.Value);
+                update.Parameters.AddWithValue("$nostream", noStream ? 1 : 0);
                 update.Parameters.AddWithValue("$now", now);
                 update.Parameters.AddWithValue("$id", id);
                 update.ExecuteNonQuery();
@@ -733,17 +744,21 @@ internal sealed class GameLibrary
 
             using var insert = _database.Command(
                 "INSERT INTO games (source, external_id, title, launch_command, install_path, " +
-                "box_art_path, first_seen_at, last_seen_at, manual) " +
-                "VALUES ('by hand', NULL, $title, $launch, $install, NULL, $now, $now, 1) " +
-                "RETURNING id;");
+                "box_art_path, first_seen_at, last_seen_at, manual, arguments, no_stream) " +
+                "VALUES ('by hand', NULL, $title, $launch, $install, NULL, $now, $now, 1, " +
+                "$arguments, $nostream) RETURNING id;");
 
             insert.Parameters.AddWithValue("$title", title);
             insert.Parameters.AddWithValue("$launch", launchCommand);
             insert.Parameters.AddWithValue("$install", (object?)install ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$arguments", (object?)extra ?? DBNull.Value);
+            insert.Parameters.AddWithValue("$nostream", noStream ? 1 : 0);
             insert.Parameters.AddWithValue("$now", now);
 
             var added = Convert.ToInt64(insert.ExecuteScalar());
-            Log.Info($"\"{title}\" was added by hand and starts {launchCommand}");
+            Log.Info($"\"{title}\" was added by hand and starts {launchCommand}" +
+                     (extra is null ? string.Empty : $" {extra}") +
+                     (noStream ? ", without a stream" : string.Empty));
             return added;
         }
     }
@@ -874,7 +889,7 @@ internal sealed class GameLibrary
         {
             using var command = _database.Command(
                 "SELECT id, source, external_id, title FROM games " +
-                "WHERE box_art_path IS NULL AND removed_at IS NULL " +
+                "WHERE box_art_path IS NULL AND removed_at IS NULL AND no_stream = 0 " +
                 "  AND (art_checked_at IS NULL OR art_checked_at < $cutoff) " +
                 "ORDER BY title COLLATE NOCASE;");
             command.Parameters.AddWithValue("$cutoff", cutoff);
@@ -988,7 +1003,7 @@ internal sealed class GameLibrary
         {
             using var command = _database.Command(
                 "SELECT launch_command, install_path, title, pointer, quality, starting_card, " +
-                "working_dir " +
+                "working_dir, arguments, no_stream " +
                 "FROM games WHERE id = $id AND removed_at IS NULL;");
             command.Parameters.AddWithValue("$id", gameId);
 
@@ -1002,7 +1017,50 @@ internal sealed class GameLibrary
                 reader.GetInt64(3) != 0,
                 Quality(reader.GetInt64(4)),
                 Splash(reader.GetInt64(5)),
-                reader.IsDBNull(6) ? null : reader.GetString(6));
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.GetInt64(8) != 0);
+        }
+    }
+
+    // The client number a row is listed under now, or zero when it is not on the list.
+    internal int ClientIdFor(long gameId, int running = 0) =>
+        List(running).FirstOrDefault(game => game.Id == gameId)?.ClientId ?? 0;
+
+    internal void RecordRunningProgram(RunningProgramRecord? program)
+    {
+        lock (_database.Gate)
+        {
+            using var command = _database.Command(program is null
+                ? "DELETE FROM running_program;"
+                : "INSERT OR REPLACE INTO running_program (slot, game_id, pid, started_at) " +
+                  "VALUES (1, $game, $pid, $started);");
+
+            if (program is not null)
+            {
+                command.Parameters.AddWithValue("$game", program.GameId);
+                command.Parameters.AddWithValue("$pid", program.ProcessId);
+                command.Parameters.AddWithValue("$started",
+                    program.StartedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+            }
+
+            command.ExecuteNonQuery();
+        }
+    }
+
+    internal RunningProgramRecord? RunningProgram()
+    {
+        lock (_database.Gate)
+        {
+            using var command = _database.Command(
+                "SELECT game_id, pid, started_at FROM running_program WHERE slot = 1;");
+
+            using var reader = command.ExecuteReader();
+            if (!reader.Read()) return null;
+
+            return new RunningProgramRecord(reader.GetInt64(0), reader.GetInt32(1),
+                DateTime.Parse(reader.GetString(2), CultureInfo.InvariantCulture,
+                               DateTimeStyles.RoundtripKind));
         }
     }
 

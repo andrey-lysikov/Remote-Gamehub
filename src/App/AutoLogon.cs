@@ -112,9 +112,9 @@ internal static class AutoLogon
         Log.Warn(Notice(check.Account));
 
         tray.Notify(AppParameters.Identity.DisplayName,
-            "Your account has a password and Windows does not sign in by itself, so this host " +
-            "cannot be reached after a restart until somebody signs in at the machine. Click " +
-            "here for a way to change that.",
+            Text.T("Your account has a password and Windows does not sign in by itself, so this host " +
+                   "cannot be reached after a restart until somebody signs in at the machine. Click " +
+                   "here for a way to change that."),
             isError: false, onClick: openPage);
     }
 
@@ -143,8 +143,8 @@ internal static class AutoLogon
 
         if (!opened)
         {
-            return "Windows' sign-in settings could not be opened; the log says why. At the " +
-                   "machine, press Win+R and run netplwiz.";
+            return Text.T("Windows' sign-in settings could not be opened; the log says why. At the " +
+                          "machine, press Win+R and run netplwiz.");
         }
 
         Log.Event("Windows' sign-in settings (netplwiz) were opened on the machine's screen, as " +
@@ -152,9 +152,9 @@ internal static class AutoLogon
 
         _ = Task.Run(WatchForSwitch);
 
-        return "Opened on the machine's screen. In that window untick \"Users must enter a user " +
-               "name and password to use this computer\", press OK, and type the Windows " +
-               "password into the box Windows shows. This page notices when it is done.";
+        return Text.T("Opened on the machine's screen. In that window untick \"Users must enter a user " +
+                      "name and password to use this computer\", press OK, and type the Windows " +
+                      "password into the box Windows shows. This page notices when it is done.");
     }
 
     // Windows 11 hides the box behind a "passwordless" flag; shown again, since without it the
@@ -200,7 +200,7 @@ internal static class AutoLogon
             Log.Event("automatic sign-in is on now; this host comes back on its own after a restart");
 
             _tray?.Notify(AppParameters.Identity.DisplayName,
-                "Automatic sign-in is on. This host will be reachable after a restart.",
+                Text.T("Automatic sign-in is on. This host will be reachable after a restart."),
                 isError: false);
             return;
         }

@@ -129,7 +129,7 @@ internal sealed class WebConsole : IAsyncDisposable
                              "reachable from outside.");
 
                     await WriteAsync(stream, 403, "text/plain",
-                        "This page answers only on the local network.");
+                        Text.T("This page answers only on the local network."));
                     return;
                 }
 
@@ -159,11 +159,11 @@ internal sealed class WebConsole : IAsyncDisposable
             if (name.Length > 48) name = name[..48];
 
             var answer = !digits
-                ? "A code is four digits."
+                ? Text.T("A code is four digits.")
                 : _pairing.SupplyPin(pin, name)
-                    ? "Sent. The client should finish pairing in a moment."
-                    : "Nothing is waiting for a code. Press Pair on the client and type the " +
-                      "digits it shows then; the ones before are of no use now.";
+                    ? Text.T("Sent. The client should finish pairing in a moment.")
+                    : Text.T("Nothing is waiting for a code. Press Pair on the client and type the " +
+                      "digits it shows then; the ones before are of no use now.");
 
             await WriteAsync(stream, 200, "text/plain", answer);
             return;
@@ -175,8 +175,8 @@ internal sealed class WebConsole : IAsyncDisposable
         {
             await WriteAsync(stream, 200, "text/plain",
                 _pairing.CancelWaiting()
-                    ? "Pairing cancelled."
-                    : "Nothing is waiting to pair.");
+                    ? Text.T("Pairing cancelled.")
+                    : Text.T("Nothing is waiting to pair."));
             return;
         }
 
@@ -188,7 +188,7 @@ internal sealed class WebConsole : IAsyncDisposable
             rescan?.Invoke("asked for from the page");
 
             await WriteAsync(stream, 200, "text/plain",
-                rescan is null ? "The scan is not ready yet." : "Scanning…");
+                rescan is null ? Text.T("The scan is not ready yet.") : Text.T("Scanning…"));
             return;
         }
 
@@ -207,9 +207,9 @@ internal sealed class WebConsole : IAsyncDisposable
         {
             await WriteAsync(stream, 200, "text/plain", await _updates.CheckAsync() switch
             {
-                UpdateChecker.Outcome.Newer => $"v{_updates.Newer} is out",
-                UpdateChecker.Outcome.Current => "Up to date",
-                _ => "Check failed",
+                UpdateChecker.Outcome.Newer => Text.T("v{0} is out", _updates.Newer),
+                UpdateChecker.Outcome.Current => Text.T("Up to date"),
+                _ => Text.T("Check failed"),
             });
             return;
         }
@@ -295,14 +295,22 @@ internal sealed class WebConsole : IAsyncDisposable
         if (request.Query("stop") == "1")
         {
             _sessions.Cancel();
-            await WriteAsync(stream, 200, "text/plain", "Stopped.");
+            await WriteAsync(stream, 200, "text/plain", Text.T("Stopped."));
+            return;
+        }
+
+        // A program without a stream, started on the host from here; nothing is streamed.
+        if (request.Query("start") is { } startId && long.TryParse(startId, out var toStart))
+        {
+            await WriteAsync(stream, 200, "text/plain",
+                _sessions.StartProgram(toStart, out var refusal) ? Text.T("Started.") : Text.T("Not started: {0}", refusal));
             return;
         }
 
         if (request.Query("remove") is { } removeId && long.TryParse(removeId, out var toRemove))
         {
             _games.Remove(toRemove);
-            await WriteAsync(stream, 200, "text/plain", "Removed.");
+            await WriteAsync(stream, 200, "text/plain", Text.T("Removed."));
             return;
         }
 
@@ -313,7 +321,7 @@ internal sealed class WebConsole : IAsyncDisposable
             var said = _games.Reset(toReset);
             if (said.StartsWith("Reset.", StringComparison.Ordinal)) Rescan?.Invoke("a game was reset");
 
-            await WriteAsync(stream, 200, "text/plain", said);
+            await WriteAsync(stream, 200, "text/plain", Text.T(said));
             return;
         }
 
@@ -326,13 +334,14 @@ internal sealed class WebConsole : IAsyncDisposable
             if (title.Length == 0 || command.Length == 0)
             {
                 await WriteAsync(stream, 200, "text/plain",
-                    "A game needs a name and something to start.");
+                    Text.T("A game needs a name and something to start."));
                 return;
             }
 
             // Save answers with the row's identifier, which is the new one when a game is being
             // added: the pointer switch belongs to that row and is written straight after.
-            var saved = _games.Save(toSave, title, command, folder);
+            var saved = _games.Save(toSave, title, command, folder,
+                (request.Query("args") ?? string.Empty).Trim(), request.Query("nostream") == "1");
             _games.RecordPointer(saved, request.Query("pointer") == "1");
 
             if (int.TryParse(request.Query("card"), out var splash) && Enum.IsDefined(typeof(SplashMode), splash))
@@ -344,7 +353,7 @@ internal sealed class WebConsole : IAsyncDisposable
                 _games.RecordQuality(saved, (StreamQuality)level);
             }
 
-            await WriteAsync(stream, 200, "text/plain", "Saved.");
+            await WriteAsync(stream, 200, "text/plain", Text.T("Saved."));
             return;
         }
 
@@ -366,13 +375,13 @@ internal sealed class WebConsole : IAsyncDisposable
         {
             if (request.Body.Length == 0)
             {
-                await WriteAsync(stream, 200, "text/plain", "Nothing arrived.");
+                await WriteAsync(stream, 200, "text/plain", Text.T("Nothing arrived."));
                 return;
             }
 
             var stored = CoverArt.Store(_games, forUpload, _directory, request.Body);
             await WriteAsync(stream, 200, "text/plain",
-                stored ? "Uploaded." : "That file is not a picture this machine can read.");
+                stored ? Text.T("Uploaded.") : Text.T("That file is not a picture this machine can read."));
             return;
         }
 
@@ -383,7 +392,7 @@ internal sealed class WebConsole : IAsyncDisposable
             var address = (request.Query("url") ?? string.Empty).Trim();
             if (address.Length == 0)
             {
-                await WriteAsync(stream, 200, "text/plain", "Paste the address of a picture.");
+                await WriteAsync(stream, 200, "text/plain", Text.T("Paste the address of a picture."));
                 return;
             }
 
@@ -403,7 +412,7 @@ internal sealed class WebConsole : IAsyncDisposable
         {
             var gone = _clients.Forget(toForget);
             await WriteAsync(stream, 200, "text/plain",
-                gone ? "Forgotten." : "There is no such device.");
+                gone ? Text.T("Forgotten.") : Text.T("There is no such device."));
             return;
         }
 
@@ -419,8 +428,8 @@ internal sealed class WebConsole : IAsyncDisposable
         {
             await WriteAsync(stream, 200, "text/plain",
                 _guard.Release(toRelease)
-                    ? "Let back in."
-                    : "That address is not being refused.");
+                    ? Text.T("Let back in.")
+                    : Text.T("That address is not being refused."));
             return;
         }
 
@@ -447,10 +456,13 @@ internal sealed class WebConsole : IAsyncDisposable
         {
             // The title and the command travel with the tile, so that opening the editor needs no
             // second request: the page already has everything the window asks about.
-            html.Append($"<article class=\"game{(game.Id == running ? " running" : string.Empty)}\" " +
+            html.Append($"<article class=\"game{(game.Id == running ? " running" : string.Empty)}" +
+                        $"{(game.NoStream ? " nostream" : string.Empty)}\" " +
                         $"data-id={game.Id} " +
                         $"data-title=\"{Escape(game.Title)}\" " +
                         $"data-command=\"{Escape(game.LaunchCommand)}\" " +
+                        $"data-args=\"{Escape(game.Arguments ?? string.Empty)}\" " +
+                        $"data-nostream={(game.NoStream ? 1 : 0)} " +
                         $"data-folder=\"{Escape(game.InstallPath ?? string.Empty)}\" " +
                         $"data-pointer={(game.Pointer ? 1 : 0)} " +
                         $"data-quality={(int)game.Quality} " +
@@ -468,23 +480,27 @@ internal sealed class WebConsole : IAsyncDisposable
 
             // Always in the markup; the poll that follows the running one toggles the article's
             // class, and CSS alone decides whether this badge is seen.
-            html.Append("<span class=running>Running</span>");
+            html.Append($"<span class=running>{Text.T("Running")}</span>");
 
             // Centred on the poster rather than among the small tools below: stopping the one
             // game that is running is the one action here worth not having to aim for.
-            html.Append($"<button data-do=stop title=\"Stop\" class=stop>{StopIcon}</button>");
+            html.Append($"<button data-do=stop title=\"{Text.T("Stop")}\" class=stop>{StopIcon}</button>");
+
+            // Only a program without a stream is started from here; a game needs a client.
+            if (game.NoStream)
+                html.Append($"<button data-do=start title=\"{Text.T("Start")}\" class=start>{PlayIcon}</button>");
 
             // Reset only where there is something to reset: a store's game changed in any way on
             // this page. A game added by hand has no found state to go back to.
             var changedHere = game.Manual || game.ArtManual || game.Pointer ||
                               game.Quality != StreamQuality.High || game.Splash != SplashMode.Auto;
             var reset = game.Source != "by hand" && changedHere
-                ? $"<button data-do=reset title=\"Reset to what was found\">{ResetIcon}</button>"
+                ? $"<button data-do=reset title=\"{Text.T("Reset to what was found")}\">{ResetIcon}</button>"
                 : string.Empty;
 
             html.Append("<div class=tools>" + reset +
-                        $"<button data-do=edit title=\"Edit\">{PencilIcon}</button>" +
-                        $"<button data-do=remove title=\"Remove\" class=danger>{TrashIcon}</button>" +
+                        $"<button data-do=edit title=\"{Text.T("Edit")}\">{PencilIcon}</button>" +
+                        $"<button data-do=remove title=\"{Text.T("Remove")}\" class=danger>{TrashIcon}</button>" +
                         "</div>");
 
             html.Append("</div>");
@@ -493,15 +509,16 @@ internal sealed class WebConsole : IAsyncDisposable
             // Where the game came from, and whether anybody has touched it since: "xbox (changed)"
             // says more than "by hand", which loses how the game is started.
             var changed = game.Manual || game.ArtManual;
-            html.Append($"<p class=q>{Escape(game.Source)}" +
-                        (changed && game.Source != "by hand" ? " (changed)" : string.Empty) +
+            html.Append($"<p class=q>{Escape(Text.T(game.Source))}" +
+                        (changed && game.Source != "by hand" ? Text.T(" (changed)") : string.Empty) +
+                        (game.NoStream ? Text.T(" · no stream") : string.Empty) +
                         "</p>");
             html.Append("</article>");
         }
 
         // Last in the grid, and the same shape as the tiles beside it: a game is added where the
         // games are, not from a form somewhere else on the page.
-        html.Append($"<button class=\"game add\" id=addtile>{PlusIcon}<span>Add a game</span></button>");
+        html.Append($"<button class=\"game add\" id=addtile>{PlusIcon}<span>{Text.T("Add a game")}</span></button>");
 
         return html.ToString();
     }
@@ -515,17 +532,18 @@ internal sealed class WebConsole : IAsyncDisposable
 
         // The heading is part of the list rather than of the section around it, so that it comes
         // and goes with the rows when the page replaces them.
-        var html = new StringBuilder("<h2>Paired devices</h2>");
+        var html = new StringBuilder($"<h2>{Text.T("Paired devices")}</h2>");
 
         foreach (var client in clients)
         {
             html.Append($"<div class=client data-id={client.Id} " +
                         $"data-name=\"{Escape(client.Name)}\">");
             html.Append($"<b>{Escape(client.Name)}</b>");
-            html.Append($"<span class=q>last seen {client.LastSeenAt.LocalDateTime:yyyy-MM-dd HH:mm}" +
-                        $" · paired {client.PairedAt.LocalDateTime:yyyy-MM-dd}" +
+            html.Append("<span class=q>" + Text.T("last seen {0} · paired {1}",
+                            client.LastSeenAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
+                            client.PairedAt.LocalDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) +
                         $" · {client.Fingerprint[..8].ToLowerInvariant()}</span>");
-            html.Append($"<button data-do=forget title=\"Forget\" class=danger>{TrashIcon}</button>");
+            html.Append($"<button data-do=forget title=\"{Text.T("Forget")}\" class=danger>{TrashIcon}</button>");
             html.Append("</div>");
         }
 
@@ -536,9 +554,9 @@ internal sealed class WebConsole : IAsyncDisposable
     // most of a day once an address has earned a few in a row, so both ends are worth saying.
     private static string Remaining(TimeSpan left) => left.TotalMinutes switch
     {
-        < 1 => "under a minute left",
-        < 60 => $"{left.TotalMinutes:0} min left",
-        _ => $"{(int)left.TotalHours} h {left.Minutes} min left",
+        < 1 => Text.T("under a minute left"),
+        < 60 => Text.T("{0} min left", left.TotalMinutes.ToString("0", CultureInfo.InvariantCulture)),
+        _ => Text.T("{0} h {1} min left", (int)left.TotalHours, left.Minutes),
     };
 
     // The addresses being refused right now, the busiest three of them. Only while the ports are
@@ -552,9 +570,9 @@ internal sealed class WebConsole : IAsyncDisposable
 
         // The heading and the count belong to the list rather than to the section around it, so
         // that they are replaced together when the page fetches this again.
-        var html = new StringBuilder("<h2>Refused addresses</h2>");
-        html.Append($"<div class=banline>banned {blocked.Count} ip" +
-                    (shown > 0 ? $", top {shown} is:" : string.Empty) + "</div>");
+        var html = new StringBuilder($"<h2>{Text.T("Refused addresses")}</h2>");
+        html.Append("<div class=banline>" + Text.T("banned {0} ip", blocked.Count) +
+                    (shown > 0 ? Text.T(", top {0} is:", shown) : string.Empty) + "</div>");
 
         foreach (var peer in blocked.Take(shown))
         {
@@ -563,11 +581,11 @@ internal sealed class WebConsole : IAsyncDisposable
 
             // The run of blocks is only worth a word once there has been more than one: it is
             // what says this address will be refused for longer and longer.
-            html.Append($"<span class=q>{peer.Attempts} attempts · {Remaining(peer.Left)}" +
-                        (peer.Blocks > 1 ? $" · {peer.Blocks} blocks in a row" : string.Empty) +
+            html.Append("<span class=q>" + Text.T("{0} attempts", peer.Attempts) + $" · {Remaining(peer.Left)}" +
+                        (peer.Blocks > 1 ? Text.T(" · {0} blocks in a row", peer.Blocks) : string.Empty) +
                         "</span>");
 
-            html.Append($"<button data-do=unblock title=\"Let back in\" class=danger>" +
+            html.Append($"<button data-do=unblock title=\"{Text.T("Let back in")}\" class=danger>" +
                         $"{TrashIcon}</button>");
             html.Append("</div>");
         }
@@ -584,6 +602,7 @@ internal sealed class WebConsole : IAsyncDisposable
         // One pass over Web/page.html. Lists are drawn here rather than in the browser, so the first
         // paint is the whole page.
         return WebAssets.Fill(WebAssets.Part("page"),
+            ("lang", Text.Language),
             ("theme", ThemeName()),
             ("name", AppParameters.Identity.DisplayName),
             ("version", Program.Version),
@@ -651,7 +670,7 @@ internal sealed class WebConsole : IAsyncDisposable
     // The line above the two fields. The client's own name for itself is quoted rather than
     // used, because on Moonlight it is the same word on every device.
     private static string WhoIsPairing(string clientName) =>
-        $"A device calling itself <b>{Escape(clientName)}</b> wants to pair with this machine.";
+        Text.T("A device calling itself <b>{0}</b> wants to pair with this machine.", Escape(clientName));
 
     // What is happening on this machine, which is the whole of the line under the heading: one
     // client at a time, and its stream's own numbers while there is one.
@@ -660,9 +679,9 @@ internal sealed class WebConsole : IAsyncDisposable
         var stream = _sessions.Status;
 
         return stream.Streaming
-            ? $"<span class=live>streaming</span> to {stream.Client} " +
+            ? Text.T("<span class=live>streaming</span> to {0}", stream.Client) + " " +
               $"<span class=dot>·</span> {stream.Detail}"
-            : "waiting for a client";
+            : Text.T("waiting for a client");
     }
 
     // What this machine is, on the heading's line: host name, encoder, games and uptime. Off or
@@ -689,13 +708,13 @@ internal sealed class WebConsole : IAsyncDisposable
             if (_encoder.AnyHdr) machine.Add("HDR");
         }
 
-        machine.Add($"{_games.Count()} games");
+        machine.Add(Text.T("{0} games", _games.Count()));
 
         // Which controller bus is presenting the pads, left out entirely when there is none: a
         // client whose controller does nothing has one question, and an absent line answers it.
         if (_gamepads.IsAvailable) machine.Add(Escape(_gamepads.Driver));
 
-        machine.Add($"up {Escape(Describe(uptime))}");
+        machine.Add(Text.T("up {0}", Escape(Describe(uptime))));
 
         if (_config.Upnp) machine.Add("uPnP");
 
@@ -704,24 +723,24 @@ internal sealed class WebConsole : IAsyncDisposable
         if (_updates.Newer is { } newer)
         {
             machine.Add($"<a class=update href=\"{Escape(_updates.Link)}\" target=_blank " +
-                        $"rel=noopener>version {Escape(newer)} is out — download</a>");
+                        "rel=noopener>" + Text.T("version {0} is out — download", Escape(newer)) + "</a>");
         }
 
         return string.Join(" <span class=dot>·</span> ", machine);
     }
 
     private static string Describe(TimeSpan span) => span.TotalDays >= 1
-        ? $"{(int)span.TotalDays} d {span.Hours} h"
+        ? Text.T("{0} d {1} h", (int)span.TotalDays, span.Hours)
         : span.TotalHours >= 1
-            ? $"{(int)span.TotalHours} h {span.Minutes} min"
-            : $"{(int)span.TotalMinutes} min";
+            ? Text.T("{0} h {1} min", (int)span.TotalHours, span.Minutes)
+            : Text.T("{0} min", (int)span.TotalMinutes);
 
     // The end of the log file, read while the server is still writing to it — hence the sharing
     // flags. Cut at the first line break, so the page never opens on half a line.
     private static string ReadLogTail()
     {
         var path = Log.Path;
-        if (path is null) return "There is no log file.";
+        if (path is null) return Text.T("There is no log file.");
 
         try
         {
@@ -838,6 +857,9 @@ internal sealed class WebConsole : IAsyncDisposable
 
     private const string StopIcon =
         "<svg viewBox=\"0 0 24 24\" aria-hidden=true><rect x=6 y=6 width=12 height=12 rx=2/></svg>";
+
+    private const string PlayIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><path d=\"M8 5v14l11-7z\"/></svg>";
 
     private const string PlusIcon =
         "<svg viewBox=\"0 0 24 24\" class=big aria-hidden=true><path d=\"M12 5v14M5 12h14\"/></svg>";

@@ -166,7 +166,7 @@ internal static class CoverArt
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
         {
-            return "That is not an http or https address.";
+            return Text.T("That is not an http or https address.");
         }
 
         try
@@ -177,19 +177,19 @@ internal static class CoverArt
 
             using var response = await http.GetAsync(uri, cancel);
             if (!response.IsSuccessStatusCode)
-                return $"The address answered {(int)response.StatusCode}.";
+                return Text.T("The address answered {0}.", (int)response.StatusCode);
 
             var bytes = await response.Content.ReadAsByteArrayAsync(cancel);
-            if (bytes.Length == 0) return "The address answered with nothing.";
+            if (bytes.Length == 0) return Text.T("The address answered with nothing.");
 
             return Store(library, gameId, directory, bytes)
-                ? "Fetched."
-                : "What came back is not a picture this machine can read.";
+                ? Text.T("Fetched.")
+                : Text.T("What came back is not a picture this machine can read.");
         }
         catch (Exception error)
         {
             Log.Info($"a cover could not be fetched from {uri}: {error.Message}");
-            return $"It could not be fetched: {error.Message}";
+            return Text.T("It could not be fetched: {0}", error.Message);
         }
     }
 

@@ -241,10 +241,8 @@ internal sealed class Database : IDisposable
 
         if (version < 14)
         {
-            // The number a client knows this game by, apart from the row id: CRC32 of the title and
-            // the cover's SHA-256, as Sunshine does. Clients keep a cover forever under that number,
-            // so a new picture has to arrive under a new one. client_key is what it was worked out
-            // from (title, cover path, size, write time); NULL for both means not worked out yet.
+            // client_id: the game's id for clients (Sunshine-style, changes with the cover).
+            // client_key: its inputs (title, cover path, size, mtime); NULL means not computed yet.
             Execute(_connection,
                 """
                 ALTER TABLE games ADD COLUMN client_id INTEGER;
@@ -254,6 +252,26 @@ internal sealed class Database : IDisposable
 
             Execute(_connection, "PRAGMA user_version = 14;");
             version = 14;
+        }
+
+        if (version < 15)
+        {
+            // arguments: added to launch_command. no_stream: a program started on the host, never streamed.
+            // running_program: the one such program running now, so a restarted worker takes it back.
+            Execute(_connection,
+                """
+                ALTER TABLE games ADD COLUMN arguments TEXT;
+                ALTER TABLE games ADD COLUMN no_stream INTEGER NOT NULL DEFAULT 0;
+                CREATE TABLE running_program (
+                    slot       INTEGER PRIMARY KEY CHECK (slot = 1),
+                    game_id    INTEGER NOT NULL,
+                    pid        INTEGER NOT NULL,
+                    started_at TEXT    NOT NULL
+                );
+                """);
+
+            Execute(_connection, "PRAGMA user_version = 15;");
+            version = 15;
         }
 
         Log.Info(from == version

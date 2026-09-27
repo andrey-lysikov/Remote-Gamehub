@@ -154,6 +154,39 @@ internal static class SessionLauncher
         }
     }
 
+    // Starts a program as the person signed in, without the shell and without a console window.
+    // Returns the process handle for the caller to close, or zero; the reason is logged.
+    internal static nint StartProgramAsConsoleUser(string? application, string commandLine,
+                                                   string? workingDirectory, string title)
+    {
+        EnablePrivileges();
+
+        var session = Wtsapi32.ServedSessionId();
+        if (session == Wtsapi32.NoSession)
+        {
+            Log.Warn("this process is in no session; nothing can be started as the signed-in user");
+            return 0;
+        }
+
+        if (!Wtsapi32.WTSQueryUserToken(session, out var userToken))
+        {
+            Log.Warn($"the token of the person signed in to session {session} could not be " +
+                     $"obtained: {LastError()}");
+            return 0;
+        }
+
+        try
+        {
+            return StartWith(userToken, application, new StringBuilder(commandLine), workingDirectory,
+                             Advapi32.CREATE_UNICODE_ENVIRONMENT | Advapi32.CREATE_NO_WINDOW,
+                             $"\"{title}\" as the signed-in user");
+        }
+        finally
+        {
+            Kernel32.CloseHandle(userToken);
+        }
+    }
+
     // The shared tail of both: an environment block for the token, the interactive desktop, and
     // CreateProcessAsUser. Returns the process handle (the thread handle is closed here) or zero.
     private static nint StartWith(nint token, string? application, StringBuilder commandLine,

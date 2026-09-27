@@ -3,14 +3,10 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
-    <!-- WinForms only, and only for the tray icon. There is no window in this application, so
-         there is no reason to carry a presentation framework that exists to draw one. -->
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Direct3D and the encoder are reached through function pointers into their virtual tables.
-         See Native/Com.cs for why that is preferred to [ComImport] declarations. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Remote-Gamehub</AssemblyName>
     <RootNamespace>RemoteGameHub</RootNamespace>
@@ -18,7 +14,6 @@
 
   </PropertyGroup>
 
-  <!-- All of this shows in the exe properties and in the Explorer details pane -->
   <PropertyGroup>
     <Product>Remote Game Hub</Product>
     <Company>lysnet.ru</Company>
@@ -30,16 +25,10 @@
 
   <PropertyGroup>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <!-- The one drawing, used by the exe, the shortcut, the installed-programs list and the tray:
-         the coloured icon looks the same on every theme, so the four per-theme files went. -->
     <IconFile>$(MSBuildThisFileDirectory)..\pictures\RemoteGameHub.ico</IconFile>
     <ApplicationIcon>$(IconFile)</ApplicationIcon>
-    <!-- Windows 11 (build 22000) is checked at run time in PlatformGuard.cs: declaring it through
-         SupportedOSPlatformVersion needs a versioned TFM, which adds tens of megabytes of SDK. -->
   </PropertyGroup>
 
-  <!-- One exe without .NET inside: the machine needs .NET Desktop Runtime 10 or newer. When it
-       is missing the apphost itself shows the download link, before any C# runs. -->
   <PropertyGroup>
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
@@ -47,52 +36,30 @@
     <SelfContained>false</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <!-- Built for net10.0 (LTS until November 2028); runs on 11 and newer too -->
     <RollForward>LatestMajor</RollForward>
     <PublishTrimmed>false</PublishTrimmed>
-    <!-- So that no .pdb appears next to the exe -->
     <DebugType>none</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <!-- WFO0003 suggests ApplicationHighDpiMode instead of the manifest. The manifest is right:
-         capture works in physical pixels, and awareness must be in force before any code runs. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The same icon inside the exe: the tray asks for it by name as a stream, which the Win32
-         resource above is not. Embedded rather than shipped beside, since one exe was promised. -->
-    <EmbeddedResource Include="$(IconFile)"
-                      LogicalName="RemoteGameHub.Icons.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="$(IconFile)" LogicalName="RemoteGameHub.Icons.%(Filename)%(Extension)" />
 
-
-    <!-- The page: its markup, its stylesheet and its script, as three files rather than as string
-         literals in C#, where nothing checked their syntax. Embedded rather than shipped beside the
-         exe, because one exe was promised; WebAssets.cs asks for them by these names. -->
     <EmbeddedResource Include="Web\page.html" LogicalName="RemoteGameHub.Web.page.html" />
     <EmbeddedResource Include="Web\page.css" LogicalName="RemoteGameHub.Web.page.css" />
     <EmbeddedResource Include="Web\page.js" LogicalName="RemoteGameHub.Web.page.js" />
 
-    <!-- The picture a client shows beside "Desktop". Embedded rather than fetched or looked for on
-         disk: it is the one entry that is always there, so its cover must always be there too. -->
-    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\pictures\desktop-cover.png"
-                      LogicalName="RemoteGameHub.Art.desktop-cover.png" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)..\pictures\desktop-cover.png" LogicalName="RemoteGameHub.Art.desktop-cover.png" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The parsers, the pairing exchange and the library are tested as they are, internal:
-         making them public just for the tests would shape the server around its verification. -->
     <InternalsVisibleTo Include="RemoteGameHub.Tests" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The store of paired clients and whatever else outlives a run: SQLite, readable by a dozen
-         tools. Its native library is unpacked beside the exe (IncludeNativeLibrariesForSelfExtract). -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.2" />
-    <!-- Pinned above what Microsoft.Data.Sqlite 10.0.2 pulls in: 2.1.11 carries SQLite 3.49 with
-         CVE-2025-6965 (fixed in 3.50.2). Remove once Microsoft.Data.Sqlite references a fixed bundle. -->
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
-    <!-- Opus in pure C# for the audio stream: neither Windows nor .NET has an Opus encoder, and a
-         managed port adds no native dependency, so the single executable stays whole. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageReference Include="Concentus" Version="2.2.2" />
   </ItemGroup>
 

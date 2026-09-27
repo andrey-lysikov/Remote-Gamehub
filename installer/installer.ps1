@@ -79,8 +79,6 @@ try {
     $manufacturer = "$($properties.SelectSingleNode('/Project/PropertyGroup/Company').InnerText)".Trim()
     if (-not $manufacturer) { throw "No <Company> in $project" }
 
-    # Two numbers, major.minor, wherever the version is shown. The msi alone gets a third (.0),
-    # as Windows Installer compares product versions by three fields.
     if ($Version -notmatch '^\d+\.\d+$') { throw "Version $Version is not major.minor" }
     $msiVersion = "$Version.0"
 

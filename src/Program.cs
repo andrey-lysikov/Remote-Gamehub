@@ -349,8 +349,8 @@ internal static class Program
         if (!gamepads.IsAvailable)
         {
             tray.Notify(AppParameters.Identity.DisplayName,
-                "Controllers are unavailable: no controller bus driver is installed. " +
-                "Everything else works.", isError: false);
+                Text.T("Controllers are unavailable: no controller bus driver is installed. " +
+                       "Everything else works."), isError: false);
         }
 
         // Says "will use", not "listening on": nothing is bound until the listeners below open,
@@ -380,8 +380,8 @@ internal static class Program
             Log.Warn("No encoder could be opened, so nothing can be streamed until this is fixed:\n" +
                      $"    {encoder.Refusal}");
             tray.Notify(AppParameters.Identity.DisplayName,
-                "The graphics card's encoder could not be opened; streaming is unavailable. " +
-                "The log has the details.", isError: true);
+                Text.T("The graphics card's encoder could not be opened; streaming is unavailable. " +
+                       "The log has the details."), isError: true);
         }
 
         var directory = Path.GetDirectoryName(config.Path)!;
@@ -424,7 +424,7 @@ internal static class Program
         // Owns whatever is streaming. Created before the listeners, because the first thing a
         // client does after finding this machine may be to ask it to start.
         using var sessions = new SessionManager(config, preflight.Output!, encoder, games,
-                                                gamepads, tray, session, scales);
+                                                gamepads, tray, session, scales, directory);
 
         // Stops outside addresses hammering forwarded ports; refuses nobody unless Upnp is on, and
         // keeps its counts in the database so a restarted worker hands out no clean slate.
@@ -492,8 +492,8 @@ internal static class Program
         // Said once per version, in a balloon that opens the download page when clicked.
         using var updates = new UpdateChecker();
         updates.Found += newer => tray.Notify(
-            $"{AppParameters.Identity.DisplayName} v{newer} is available",
-            $"This is v{Program.Version}. Click here to open the download page.",
+            Text.T("{0} v{1} is available", AppParameters.Identity.DisplayName, newer),
+            Text.T("This is v{0}. Click here to open the download page.", Program.Version),
             isError: false,
             onClick: () => Open(updates.Link));
         updates.Start();
@@ -508,9 +508,10 @@ internal static class Program
         // derive their encryption key from them — so they are carried across by hand, per device.
         pairing.PairingStarted += name => tray.Notify(
             AppParameters.Identity.DisplayName,
-            $"{name} is pairing. Open http://{Environment.MachineName}" +
+            Text.T("{0} is pairing. Open {1} and type the code it is showing.", name,
+                   $"http://{Environment.MachineName}" +
             (config.WebPort == 80 ? string.Empty : $":{config.WebPort}") +
-            "/ and type the code it is showing.",
+                   "/"),
             isError: false);
 
 
@@ -599,18 +600,18 @@ internal static class Program
         {
             // On another thread: a large library takes seconds to walk, and this is the thread
             // the notification area itself is drawn on.
-            new TrayEntry("Refresh games", () => Task.Run(() => RescanGames("asked for from the menu"))),
-            new TrayEntry("Show status page", () => Open($"http://localhost" +
+            new TrayEntry(Text.T("Refresh games"), () => Task.Run(() => RescanGames("asked for from the menu"))),
+            new TrayEntry(Text.T("Show status page"), () => Open($"http://localhost" +
                 (config.WebPort == 80 ? string.Empty : $":{config.WebPort}") + "/")),
             // Off the message loop's thread, since it runs a process and waits for it. Still the
             // sign-in task, service or no service: the task starts the exe, which starts the service.
-            new TrayEntry("Autostart", () => Task.Run(autostart.Toggle),
+            new TrayEntry(Text.T("Autostart"), () => Task.Run(autostart.Toggle),
                           () => autostart.IsEnabled && autostart.StartsThisCopy),
             TrayEntry.Separator,
-            new TrayEntry("Show config", () => Open(config.Path)),
-            new TrayEntry("Show log", () => Open(Log.Path)),
+            new TrayEntry(Text.T("Show config"), () => Open(config.Path)),
+            new TrayEntry(Text.T("Show log"), () => Open(Log.Path)),
             TrayEntry.Separator,
-            new TrayEntry("Quit", Application.Exit),
+            new TrayEntry(Text.T("Quit"), Application.Exit),
         });
 
         // What the server is doing, for the log. It follows the session for the life of the
@@ -672,9 +673,8 @@ internal static class Program
         forwarding.DisposeAsync().AsTask().GetAwaiter().GetResult();
         console.DisposeAsync().AsTask().GetAwaiter().GetResult();
 
-        // Last of all, and only for the worker: everything is shut down, so the service may end this
-        // process at once. Otherwise it would see its worker gone and start another, unlike Quit.
-        // Not when the service asked: it is stopping already, or moving the worker to another session.
+        // Worker Quit: stop the service too, or it restarts the worker. Skipped when the service
+        // asked, since it is already stopping or moving the worker.
         if (_isWorker && !askedToStop) ServiceControl.StopIfRunning();
 
         return 0;

@@ -26,6 +26,7 @@ internal sealed unsafe class StartingCard : IDisposable
     private readonly uint _format;
     private readonly string _title;
     private readonly Image? _poster;
+    private readonly string? _caption;
 
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private TimeSpan _lastRedraw = TimeSpan.MinValue;
@@ -34,7 +35,7 @@ internal sealed unsafe class StartingCard : IDisposable
     internal nint Texture => (nint)_texture;
 
     private StartingCard(void* texture, void* staging, void* context, int width, int height,
-                         uint format, string title, Image? poster)
+                         uint format, string title, Image? poster, string? caption)
     {
         _texture = texture;
         _staging = staging;
@@ -44,12 +45,14 @@ internal sealed unsafe class StartingCard : IDisposable
         _format = format;
         _title = title;
         _poster = poster;
+        _caption = caption;
     }
 
     // Draws the card and puts it on the graphics card. Returns null rather than throwing: a
     // missing picture is a reason to show the desktop, never a reason to lose the stream.
     internal static StartingCard? Create(nint device, nint context, int width, int height,
-                                         uint format, string title, string? posterPath)
+                                         uint format, string title, string? posterPath,
+                                         string? caption = null)
     {
         if (format != Dxgi.DXGI_FORMAT_B8G8R8A8_UNORM &&
             format != Dxgi.DXGI_FORMAT_R16G16B16A16_FLOAT)
@@ -66,7 +69,7 @@ internal sealed unsafe class StartingCard : IDisposable
 
         try
         {
-            using var picture = Draw(width, height, title, poster, TimeSpan.Zero);
+            using var picture = Draw(width, height, title, poster, TimeSpan.Zero, caption);
 
             var description = new D3D11Texture2DDesc
             {
@@ -98,7 +101,7 @@ internal sealed unsafe class StartingCard : IDisposable
                      (posterPath is null ? " (no picture for it yet)" : string.Empty));
 
             var card = new StartingCard(texture, staging, (void*)context, width, height, format,
-                title, poster);
+                title, poster, caption);
             texture = null;
             staging = null;
             poster = null;
@@ -145,7 +148,7 @@ internal sealed unsafe class StartingCard : IDisposable
 
         try
         {
-            using var picture = Draw(_width, _height, _title, _poster, now);
+            using var picture = Draw(_width, _height, _title, _poster, now, _caption);
             Upload(_context, _staging, _texture, picture, _width, _height, _format);
         }
         catch (Exception error)
@@ -157,7 +160,7 @@ internal sealed unsafe class StartingCard : IDisposable
     // ------------------------------------------------------------------ the drawing
 
     private static Bitmap Draw(int width, int height, string title, Image? poster,
-                               TimeSpan elapsed)
+                               TimeSpan elapsed, string? note = null)
     {
         var dark = ThemeIcons.AppsAreDark();
         var background = BackgroundOf(dark);
@@ -195,7 +198,10 @@ internal sealed unsafe class StartingCard : IDisposable
             var caption = new Rectangle(width / 8, area.Bottom + (int)(height * 0.06),
                 width * 3 / 4, (int)(height * 0.2));
 
-            canvas.DrawString($"Starting {title}", font, brush, caption, format);
+            canvas.DrawString(note ?? Text.T("Starting {0}", title), font, brush, caption, format);
+
+            // A note says something finished; the spinner is only for a wait.
+            if (note is not null) return picture;
 
             // Under the text itself, not under the whole (much taller) box it is aligned to the
             // top of: LineAlignment.Near leaves most of caption's own height empty below it.

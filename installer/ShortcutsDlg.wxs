@@ -1,8 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<!-- Our one dialog, between the stock folder page and the last one: where the shortcuts go. The
-     geometry (370 x 270, banner, buttons) follows the stock dialogs so the page does not jump. -->
-
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Fragment>
     <UI>
@@ -24,20 +21,14 @@
                  Property="INSTALLDESKTOPSHORTCUT" CheckBoxValue="1"
                  Text="Add a shortcut to the desktop" />
 
-        <!-- The same question the stock last page can ask, asked here instead: there the checkbox
-             comes out in a grey box of its own; here it sits on the same ground as the two above. -->
         <Control Id="LaunchCheckBox" Type="CheckBox" X="20" Y="87" Width="330" Height="15"
                  Property="LAUNCHAFTERINSTALL" CheckBoxValue="1"
                  Text="Start the server when the installer finishes" />
 
-        <!-- What presents the client's gamepads to games. Neither this box nor the one below it
-             installs anything: a ticked box opens the driver's own page in the browser. -->
         <Control Id="ViGEmCheckBox" Type="CheckBox" X="20" Y="103" Width="330" Height="15"
                  Property="INSTALLVIGEM" CheckBoxValue="1"
                  Text="Open the ViGEmBus page, for the driver that presents the client's gamepads" />
 
-        <!-- Off to begin with. Ticking it also turns on [General] VirtualDisplay, so the server
-             looks for a virtual display as soon as one has been installed. -->
         <Control Id="VddCheckBox" Type="CheckBox" X="20" Y="119" Width="330" Height="15"
                  Property="INSTALLVDD" CheckBoxValue="1"
                  Text="Open the virtual display driver's page, and use one once it is installed" />
