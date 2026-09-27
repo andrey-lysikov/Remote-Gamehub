@@ -44,7 +44,8 @@ internal sealed class SessionManager : IDisposable
     // The one program without a stream, and whether the launch waiting to be negotiated is its notice.
     private HostProgram? _program;
     private bool _pendingNotice;
-    private readonly string _programLogs;
+    // The last program's output, kept after it ends: why it stopped is usually in there.
+    private HostProgram? _lastProgram;
 
     // The machine's sound moved onto a device that can carry what the client asked for, held here
     // rather than in the session: it is applied before the game starts, which is before there is one.
@@ -56,7 +57,7 @@ internal sealed class SessionManager : IDisposable
 
     internal SessionManager(AppConfig config, DisplayOutput output, EncoderCapabilities encoder,
                             GameLibrary games, GamepadHub gamepads, TrayIcon tray,
-                            SessionWatch sessionWatch, ScaleStore scales, string directory)
+                            SessionWatch sessionWatch, ScaleStore scales)
     {
         _config = config;
         _output = output;
@@ -66,7 +67,6 @@ internal sealed class SessionManager : IDisposable
         _tray = tray;
         _sessionWatch = sessionWatch;
         _scales = scales;
-        _programLogs = Path.Combine(directory, "programs");
 
         AdoptProgram();
     }
@@ -89,7 +89,19 @@ internal sealed class SessionManager : IDisposable
             return;
         }
 
-        lock (_gate) _program = program;
+        lock (_gate) _program = _lastProgram = program;
+    }
+
+    // The last program's title, what it wrote, and whether it still runs; null before any started.
+    internal (string Title, string Text, bool Running)? ProgramOutput
+    {
+        get
+        {
+            HostProgram? program;
+            lock (_gate) program = _lastProgram;
+
+            return program is null ? null : (program.Title, program.Output.ToString(), program.IsRunning);
+        }
     }
 
     // The program's row when a client's number names one without a stream, else null.
@@ -146,8 +158,8 @@ internal sealed class SessionManager : IDisposable
         previous?.Stop();
         previous?.Dispose();
 
-        var program = HostProgram.Start(gameId, _games.ClientIdFor(gameId), target, _programLogs,
-                                        ProgramFinished);
+        var program = HostProgram.Start(gameId, _games.ClientIdFor(gameId), target, ProgramFinished);
+        if (program is not null) lock (_gate) _lastProgram = program;
         if (program is null || !program.IsRunning)
         {
             program?.Dispose();

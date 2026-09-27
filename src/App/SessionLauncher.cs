@@ -157,7 +157,7 @@ internal static class SessionLauncher
     // Starts a program as the person signed in, without the shell and without a console window.
     // Returns the process handle for the caller to close, or zero; the reason is logged.
     internal static nint StartProgramAsConsoleUser(string? application, string commandLine,
-                                                   string? workingDirectory, string title)
+                                                   string? workingDirectory, string title, nint output)
     {
         EnablePrivileges();
 
@@ -179,7 +179,7 @@ internal static class SessionLauncher
         {
             return StartWith(userToken, application, new StringBuilder(commandLine), workingDirectory,
                              Advapi32.CREATE_UNICODE_ENVIRONMENT | Advapi32.CREATE_NO_WINDOW,
-                             $"\"{title}\" as the signed-in user");
+                             $"\"{title}\" as the signed-in user", output);
         }
         finally
         {
@@ -189,8 +189,11 @@ internal static class SessionLauncher
 
     // The shared tail of both: an environment block for the token, the interactive desktop, and
     // CreateProcessAsUser. Returns the process handle (the thread handle is closed here) or zero.
+    // STARTF_USESTDHANDLES: stdout and stderr go to the handle given, inherited by the child.
+    private const uint StartfUseStdHandles = 0x100;
+
     private static nint StartWith(nint token, string? application, StringBuilder commandLine,
-                                  string? workingDirectory, uint flags, string what)
+                                  string? workingDirectory, uint flags, string what, nint output = 0)
     {
         var haveEnvironment = Userenv.CreateEnvironmentBlock(out var environment, token, false);
         if (!haveEnvironment) environment = 0;
@@ -203,6 +206,9 @@ internal static class SessionLauncher
             {
                 Size = (uint)Marshal.SizeOf<StartupInfo>(),
                 Desktop = desktop,
+                Flags = output == 0 ? 0u : StartfUseStdHandles,
+                StdOutput = output,
+                StdError = output,
             };
 
             var directory = !string.IsNullOrWhiteSpace(workingDirectory) &&
@@ -210,7 +216,7 @@ internal static class SessionLauncher
                 ? workingDirectory
                 : null;
 
-            if (!Advapi32.CreateProcessAsUser(token, application, commandLine, 0, 0, false, flags,
+            if (!Advapi32.CreateProcessAsUser(token, application, commandLine, 0, 0, output != 0, flags,
                                               environment, directory, ref startup, out var info))
             {
                 Log.Warn($"{what} could not be started: {LastError()}");

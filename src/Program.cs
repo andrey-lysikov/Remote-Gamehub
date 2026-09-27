@@ -424,7 +424,7 @@ internal static class Program
         // Owns whatever is streaming. Created before the listeners, because the first thing a
         // client does after finding this machine may be to ask it to start.
         using var sessions = new SessionManager(config, preflight.Output!, encoder, games,
-                                                gamepads, tray, session, scales, directory);
+                                                gamepads, tray, session, scales);
 
         // Stops outside addresses hammering forwarded ports; refuses nobody unless Upnp is on, and
         // keeps its counts in the database so a restarted worker hands out no clean slate.

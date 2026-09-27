@@ -257,6 +257,18 @@ internal sealed class WebConsole : IAsyncDisposable
             return;
         }
 
+        // What the last program without a stream wrote, from memory; a header line says which.
+        if (request.Query("output") is not null)
+        {
+            var output = _sessions.ProgramOutput;
+            await WriteAsync(stream, 200, "text/plain", output is not { } program
+                ? Text.T("No program without a stream has been started yet.")
+                : (program.Running ? Text.T("{0} — running", program.Title) : Text.T("{0} — stopped", program.Title)) +
+                  "\n\n" +
+                  (program.Text.Length > 0 ? program.Text : Text.T("It has written nothing yet.")));
+            return;
+        }
+
         if (request.Query("log") is not null)
         {
             await WriteAsync(stream, 200, "text/plain", ReadLogTail());

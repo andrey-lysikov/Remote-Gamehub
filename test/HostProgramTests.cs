@@ -67,17 +67,8 @@ public class HostProgramTests
     }
 
     [Fact]
-    public void Windowed_and_console_executables_are_told_apart()
+    public void A_program_runs_hidden_its_output_is_kept_in_memory_and_it_stops_with_its_children()
     {
-        Assert.True(HostProgram.IsWindowed(System32("notepad.exe")));
-        Assert.False(HostProgram.IsWindowed(System32("cmd.exe")));
-        Assert.False(HostProgram.IsWindowed(@"C:\scripts\start.cmd"));
-    }
-
-    [Fact]
-    public void A_console_program_runs_hidden_writes_its_log_and_stops_with_its_children()
-    {
-        using var folder = new TestFolder();
         var finished = new ManualResetEventSlim();
 
         var target = new LaunchTarget(System32("ping.exe"), null, "ping", false, default, default,
@@ -85,15 +76,14 @@ public class HostProgramTests
 
         var pingsBefore = Pings();
 
-        using var program = HostProgram.Start(1, 42, target, folder.Path, _ => finished.Set());
+        using var program = HostProgram.Start(1, 42, target, _ => finished.Set());
         Assert.NotNull(program);
         Assert.True(program.IsRunning);
         Assert.Equal(42, program.AppId);
 
-        var log = Path.Combine(folder.Path, "program-1.log");
         var until = DateTime.UtcNow.AddSeconds(5);
-        while (Pings().Except(pingsBefore).Count() == 0 && DateTime.UtcNow < until) Thread.Sleep(50);
-        Assert.True(File.Exists(log));
+        while (program.Output.ToString().Length == 0 && DateTime.UtcNow < until) Thread.Sleep(50);
+        Assert.Contains("127.0.0.1", program.Output.ToString());
         Assert.NotEmpty(Pings().Except(pingsBefore));
 
         program.Stop();
@@ -107,19 +97,35 @@ public class HostProgramTests
         System.Diagnostics.Process.GetProcessesByName("PING").Select(p => p.Id).ToArray();
 
     [Fact]
-    public void A_program_that_ends_by_itself_is_reported()
+    public void A_script_runs_through_cmd_and_its_output_outlives_it()
     {
         using var folder = new TestFolder();
+        var script = folder.File("hello.cmd", "@echo hello from a script\r\n@echo to stderr 1>&2\r\n");
         var finished = new ManualResetEventSlim();
 
-        var target = new LaunchTarget(System32("cmd.exe"), null, "echo", false, default, default,
-                                      Arguments: "/c echo hello", NoStream: true);
+        var target = new LaunchTarget(script, null, "hello", false, default, default, NoStream: true);
 
-        using var program = HostProgram.Start(2, 43, target, folder.Path, _ => finished.Set());
+        using var program = HostProgram.Start(2, 43, target, _ => finished.Set());
         Assert.NotNull(program);
 
         Assert.True(finished.Wait(TimeSpan.FromSeconds(10)));
         Assert.False(program.IsRunning);
-        Assert.Contains("hello", File.ReadAllText(Path.Combine(folder.Path, "program-2.log")));
+
+        var until = DateTime.UtcNow.AddSeconds(5);
+        while (!program.Output.ToString().Contains("to stderr") && DateTime.UtcNow < until) Thread.Sleep(50);
+        Assert.Contains("hello from a script", program.Output.ToString());
+        Assert.Contains("to stderr", program.Output.ToString());
+    }
+
+    [Fact]
+    public void Output_keeps_only_the_newest_whole_lines()
+    {
+        var output = new ProgramOutput();
+        for (var i = 0; i < 40_000; i++) output.Append($"line {i}\n");
+
+        var text = output.ToString();
+        Assert.True(text.Length <= ProgramOutput.Keep);
+        Assert.StartsWith("line ", text);
+        Assert.EndsWith("line 39999\n", text);
     }
 }

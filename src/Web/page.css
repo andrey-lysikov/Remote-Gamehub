@@ -196,8 +196,13 @@ cursor:default}
 #shot.full #shotclose{display:block;position:absolute;top:.75rem;right:1rem}
 @media (max-width:40rem){#logpane{flex-direction:column}#log{flex-basis:60%}
 #shot{border-left:0;border-top:1px solid var(--line)}}
+#logbar{display:flex;align-items:center}
 #logtoggle{border:0;border-radius:0;background:none;color:var(--dim);text-align:left;
-padding:.5rem 1rem;width:100%}
+padding:.5rem 1rem;flex:1}
+#logsrc{display:none;gap:.25rem;padding-right:1rem}
+#logbox.open #logsrc{display:flex}
+#logsrc button{font-size:12px;padding:.2rem .6rem;color:var(--dim)}
+#logsrc button.on{background:var(--primary);border-color:var(--primary-line);color:var(--ink)}
 #logtoggle:hover{background:var(--panel);color:var(--ink)}
 #logtoggle::before{content:"▲ ";font-size:9px;vertical-align:middle}
 #logbox.open #logtoggle::before{content:"▼ "}

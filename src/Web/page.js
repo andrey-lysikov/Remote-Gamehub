@@ -58,10 +58,16 @@ if(shot.classList.contains('has'))shot.classList.add('full');});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')shot.classList.remove('full');});
 $('logtoggle').addEventListener('click',()=>{logbox.classList.toggle('open');
 if(logbox.classList.contains('open')){log.scrollTop=log.scrollHeight;refreshShot();}});
-setInterval(async()=>{if(!logbox.classList.contains('open'))return;
-const atEnd=log.scrollTop+log.clientHeight>=log.scrollHeight-8;
-log.textContent=await (await fetch('/?log=1')).text();
-if(atEnd)log.scrollTop=log.scrollHeight;},3000);
+let logSource='log';
+async function refreshLog(toEnd){if(!logbox.classList.contains('open'))return;
+const atEnd=toEnd||log.scrollTop+log.clientHeight>=log.scrollHeight-8;
+log.textContent=await (await fetch('/?'+logSource+'=1')).text();
+if(atEnd)log.scrollTop=log.scrollHeight;}
+setInterval(()=>refreshLog(false),3000);
+$('logsrc').addEventListener('click',e=>{const b=e.target.closest('button[data-src]');if(!b)return;
+logSource=b.dataset.src;
+document.querySelectorAll('#logsrc button').forEach(x=>x.classList.toggle('on',x===b));
+refreshLog(true);});
 
 const games=$('games'),editor=$('editor'),title=$('title'),command=$('command'),folder=$('folder'),
 editorsaid=$('editorsaid'),arturl=$('arturl'),args=$('args'),nostream=$('nostream'),
