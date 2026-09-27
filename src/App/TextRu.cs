@@ -107,6 +107,7 @@ internal static class TextRu
         ["Reset to what was found"] = "Сбросить к найденному",
         ["Reset. The game is being scanned again…"] = "Сброшено. Игра сканируется заново…",
         ["Running"] = "Запущено",
+        ["Best size: 600×800 px, portrait 3:4. Another shape gets transparent margins, it is never cropped."] = "Оптимальный размер: 600×800 пикселей, вертикально 3:4. Картинка другой формы не обрезается, а дополняется прозрачными полями.",
         ["Connections"] = "Подключения",
         ["connected"] = "подключено",
         ["No device has paired yet."] = "Сопряжённых устройств пока нет.",
