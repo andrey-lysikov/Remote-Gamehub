@@ -14,14 +14,14 @@ public class WebAssetsTests
     private static readonly string[] PageSlots =
     {
         "lang", "theme", "name", "version", "project", "style", "script", "host", "status",
-        "pairclass", "who", "autologon", "games", "clients", "blockedbox", "pointer", "log",
+        "pairclass", "who", "autologon", "games", "clients", "blocked", "available", "pointer", "log",
     };
 
     [Fact]
     public void The_page_its_styles_and_its_script_are_all_in_the_executable()
     {
         Assert.Contains("<header>", WebAssets.Part("page"));
-        Assert.Contains("<footer id=logbox>", WebAssets.Part("page"));
+        Assert.Contains("<footer id=diag", WebAssets.Part("page"));
 
         // A stylesheet and a script that are merely there, rather than merely not missing: an
         // empty resource is what a file dropped from the csproj looks like.
@@ -46,9 +46,6 @@ public class WebAssetsTests
     {
         Assert.Contains("id=autologon", WebAssets.Part("autologon"));
         Assert.Equal(new[] { "account" }, WebAssets.SlotsIn(WebAssets.Part("autologon")));
-
-        Assert.Contains("id=blockedbox", WebAssets.Part("blocked"));
-        Assert.Equal(new[] { "blocked" }, WebAssets.SlotsIn(WebAssets.Part("blocked")));
 
         Assert.Contains("id=pointer", WebAssets.Part("pointer"));
         Assert.Empty(WebAssets.SlotsIn(WebAssets.Part("pointer")));

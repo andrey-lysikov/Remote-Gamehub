@@ -84,8 +84,7 @@ aspect-ratio:3/4;border:0;background:none;color:var(--faint);cursor:pointer}
 .game.add:hover{color:var(--add-hover-ink)}
 .game.add span{font-size:12px}
 
-#clients:not(:empty){display:block;margin-top:2rem}
-#clients h2{font-size:13px;font-weight:500;color:var(--dim);margin:0 0 .6rem}
+#clients h2,#blocked h2{font-size:13px;font-weight:500;color:var(--dim);margin:0 0 .6rem}
 .client{display:flex;align-items:center;gap:.6rem;padding:.55rem .75rem;
 border:1px solid var(--line);border-radius:.45rem;margin-bottom:.4rem;
 background:var(--panel)}
@@ -93,9 +92,6 @@ background:var(--panel)}
 .client .q{flex:1;font-size:11px;min-height:0}
 .client button{padding:.3rem;line-height:0}
 
-#blocked:not(:empty){display:block;margin-top:2rem}
-#blocked h2{font-size:13px;font-weight:500;color:var(--dim);margin:0 0 .6rem}
-.banline{font-size:12px;color:var(--dim);margin:0 0 .6rem}
 
 button,.upload{font:inherit;font-size:13px;padding:.35rem .8rem;border-radius:.35rem;
 border:1px solid var(--button-line);background:var(--button);color:var(--ink);cursor:pointer}
@@ -177,14 +173,31 @@ border:2px solid transparent;background:var(--panel)}
 .pick span{display:block;font-size:11px;color:var(--dim);margin-top:.3rem;overflow:hidden;
 white-space:nowrap;text-overflow:ellipsis}
 
-#logbox{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;
+#diag{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;
 flex-direction:column;background:var(--log-bg);border-top:1px solid var(--line)}
-#logpane{display:flex;height:0;overflow:hidden;transition:height .18s ease}
-#logbox.open #logpane{height:45vh}
-#log{flex:0 0 70%;box-sizing:border-box;overflow:auto;margin:0;padding:1rem;font-size:12px;
-color:var(--log-ink);white-space:pre-wrap;word-break:break-word}
-#shot{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:.5rem;
+#diagpane{height:0;overflow:hidden;transition:height .18s ease}
+#diag.open #diagpane{height:45vh}
+#diag .pane{height:100%;box-sizing:border-box;display:flex;min-height:0}
+#diag .pane[hidden]{display:none}
+#diag pre{flex:1;min-width:0;box-sizing:border-box;overflow:auto;margin:0;padding:1rem;
+font-size:12px;color:var(--log-ink);white-space:pre-wrap;word-break:break-word}
+#diag .main{flex:1;min-width:0;display:flex;flex-direction:column}
+.banrow{padding:.45rem 1rem;border-top:1px solid var(--line);font-size:12px;white-space:nowrap;overflow-x:auto}
+.banrow:empty{display:none}
+.ban{margin-left:.7rem;color:var(--ink)}
+.ban button{border:0;background:none;padding:0 .25rem;margin-left:.15rem;font-size:14px;line-height:1;color:var(--danger-line)}
+.tag{font-size:10px;padding:.05rem .45rem;border-radius:.3rem;background:var(--live);color:var(--bg)}
+#diag .side{flex:0 1 26rem;max-width:40%;overflow:auto;padding:1rem;box-sizing:border-box;
 border-left:1px solid var(--line)}
+#diagbar{display:flex;align-items:center;gap:.3rem;padding:.35rem 1rem;flex-wrap:wrap}
+#diagbar span{font-size:12px;color:var(--dim);margin-right:.5rem}
+#diagbar button{font-size:12px;padding:.2rem .7rem;color:var(--dim)}
+#diagbar button[hidden]{display:none}
+#diagbar button.on{background:var(--primary);border-color:var(--primary-line);color:var(--ink)}
+#shot{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:.5rem}
+#pane-screen.with-output #shot{flex:0 0 40%;border-right:1px solid var(--line)}
+#output{display:none}
+#pane-screen.with-output #output{display:block}
 #shot img{display:none;max-width:100%;max-height:100%;object-fit:contain;border-radius:.3rem}
 #shot.has{cursor:zoom-in}
 #shot.has img{display:block}
@@ -194,15 +207,6 @@ border-left:1px solid var(--line)}
 #shot.full{position:fixed;inset:0;z-index:100;background:var(--bg);border:0;padding:3.5rem 1rem 1rem;
 cursor:default}
 #shot.full #shotclose{display:block;position:absolute;top:.75rem;right:1rem}
-@media (max-width:40rem){#logpane{flex-direction:column}#log{flex-basis:60%}
-#shot{border-left:0;border-top:1px solid var(--line)}}
-#logbar{display:flex;align-items:center}
-#logtoggle{border:0;border-radius:0;background:none;color:var(--dim);text-align:left;
-padding:.5rem 1rem;flex:1}
-#logsrc{display:none;gap:.25rem;padding-right:1rem}
-#logbox.open #logsrc{display:flex}
-#logsrc button{font-size:12px;padding:.2rem .6rem;color:var(--dim)}
-#logsrc button.on{background:var(--primary);border-color:var(--primary-line);color:var(--ink)}
-#logtoggle:hover{background:var(--panel);color:var(--ink)}
-#logtoggle::before{content:"▲ ";font-size:9px;vertical-align:middle}
-#logbox.open #logtoggle::before{content:"▼ "}
+@media (max-width:40rem){#diag .pane{flex-direction:column}
+#diag .side{flex-basis:auto;max-width:none;border-left:0;border-top:1px solid var(--line)}
+#pane-screen.with-output #shot{flex-basis:40%;border-right:0;border-bottom:1px solid var(--line)}}

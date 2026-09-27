@@ -121,7 +121,7 @@ internal sealed class PairingManager
 
         // Refusing an attempt at the machine itself is the plainest statement there is that it
         // was not wanted, so it counts against the address the same as a wrong PIN.
-        _guard.Failed(waiting.Address, "the pairing was refused at this machine");
+        Refused(waiting.Address, "the pairing was refused at this machine");
         return true;
     }
 
@@ -212,11 +212,12 @@ internal sealed class PairingManager
             _sessions[uniqueId] = session;
         }
 
-        if (failed is not null) _guard.Failed(address, failed);
+        if (failed is not null) Refused(address, failed);
 
         Log.Event($"pairing step 1 of 5: \"{name}\" ({uniqueId}) asked for the certificate and is " +
                  "waiting for its PIN");
         PairingStarted?.Invoke(name);
+        _guard.Journal.Note(Text.T("{0} ({1}) asked to pair", name, Plain(address)));
 
         // Held here, on the one request the client is willing to wait on. Nothing about this
         // machine has been handed over yet, and nothing is until the digits arrive.
@@ -234,7 +235,7 @@ internal sealed class PairingManager
 
             // Nobody answered it, which from outside this network is the same as being turned
             // away: an address that asks and is ignored is asking for something it was not given.
-            _guard.Failed(address, $"no PIN was entered within {PinWait.TotalMinutes:0} minutes");
+            Refused(address, $"no PIN was entered within {PinWait.TotalMinutes:0} minutes");
             return Failed("No PIN was entered on the host in time.");
         }
         catch (OperationCanceledException) when (session.Pin.Task.IsCanceled)
@@ -398,7 +399,7 @@ internal sealed class PairingManager
             Log.Warn($"\"{session.DeviceName}\" failed pairing: its secret was not signed by the " +
                      "certificate it presented.");
 
-            _guard.Failed(session.Address,
+            Refused(session.Address,
                           "its secret was not signed by the certificate it presented");
             return Failed("The client's secret was not signed by the certificate it presented.");
         }
@@ -415,7 +416,7 @@ internal sealed class PairingManager
             Log.Warn($"\"{session.DeviceName}\" failed pairing: the PIN entered on this machine did " +
                      "not match the one the client is showing. Ask it to pair again.");
 
-            _guard.Failed(session.Address, "the PIN did not match the one the client was showing");
+            Refused(session.Address, "the PIN did not match the one the client was showing");
             return Failed("The PIN entered on the host does not match the one this client is showing.");
         }
 
@@ -423,6 +424,7 @@ internal sealed class PairingManager
         // under the name the person gave it on the page.
         _clients.Admit(session.UniqueId, session.DeviceName, session.ClientCertificate);
         _guard.Succeeded(session.Address);
+        _guard.Journal.Note(Text.T("{0} ({1}) paired", session.DeviceName, Plain(session.Address)));
 
         return Document(xml => xml.WriteElementString("paired", "1"));
     }
@@ -513,4 +515,14 @@ internal sealed class PairingManager
             xml.WriteElementString("paired", "0");
             xml.WriteElementString("status_message", reason);
         });
+
+    // A pairing that did not end well: counted by the guard, and told in the journal. The guard
+    // tells the ones from outside itself, with their count.
+    private void Refused(IPAddress? address, string why)
+    {
+        _guard.Failed(address, why);
+        if (!_guard.Watches(address)) _guard.Journal.Note(Text.T("{0}: pairing failed", Plain(address)));
+    }
+
+    private static string Plain(IPAddress? address) => address is null ? "?" : Peer.Plain(address).ToString();
 }

@@ -171,6 +171,11 @@ internal sealed class GameStreamServer : IAsyncDisposable
 
                 if (known is not null) _clients.Touch(known.Fingerprint);
 
+                var plain = address is null ? "?" : Peer.Plain(address).ToString();
+                _guard.Journal.Seen(known?.Fingerprint ?? plain, plain, known is null
+                    ? Text.T("unpaired device {0}", plain)
+                    : Who(known, address));
+
                 Log.Info($"{peer} {(secure ? "https" : "http")} {request.Method} " +
                          $"{request.Path}{request.QueryForLog}" +
                          (known is null ? string.Empty : $"  [{known.Name}]"));
@@ -357,9 +362,9 @@ internal sealed class GameStreamServer : IAsyncDisposable
         "/serverinfo" => ServerInfo(known, reachedAt),
         "/applist" => AppList(),
         "/pair" => await _pairing.HandleAsync(request, address, cancel),
-        "/launch" => Launch(request, address, reachedAt),
-        "/resume" => Resume(request, address, reachedAt),
-        "/cancel" => Cancel(),
+        "/launch" => Launch(request, address, reachedAt, Who(known, address)),
+        "/resume" => Resume(request, address, reachedAt, Who(known, address)),
+        "/cancel" => Cancel(Who(known, address)),
         _ => null,
     };
 
@@ -570,15 +575,21 @@ internal sealed class GameStreamServer : IAsyncDisposable
 
     // Starts a session. The client sends the key its input and control messages are encrypted
     // with, what it wants to run, and a picture shape — the picture is agreed later over RTSP.
-    private string Launch(HttpRequest request, IPAddress? from, EndPoint? reachedAt)
+    private string Launch(HttpRequest request, IPAddress? from, EndPoint? reachedAt, string who)
     {
         var launch = ReadLaunchRequest(request);
         if (launch is null)
             return LaunchRefused(400, Text.T("The launch request is missing or malforming a parameter " +
                                              "this server needs."));
 
+        var app = AppName(launch.AppId);
         if (!_sessions.Launch(launch, from, out var refusal))
+        {
+            _guard.Journal.Note(Text.T("{0}: {1} was not started — {2}", who, app, refusal));
             return LaunchRefused(503, Text.T("This server cannot start the stream: {0}", refusal));
+        }
+
+        _guard.Journal.Note(Text.T("{0} started {1}", who, app));
 
         return BuildDocument(xml =>
         {
@@ -673,7 +684,7 @@ internal sealed class GameStreamServer : IAsyncDisposable
 
     // Reattaches to a session already running. This server reports a running application only
     // while it is actually streaming, so this is asked when a client's own stream dropped.
-    private string Resume(HttpRequest request, IPAddress? from, EndPoint? reachedAt)
+    private string Resume(HttpRequest request, IPAddress? from, EndPoint? reachedAt, string who)
     {
         var resume = ReadLaunchRequest(request);
         if (resume is null)
@@ -688,6 +699,7 @@ internal sealed class GameStreamServer : IAsyncDisposable
 
         if (!_sessions.Resume(resume, from, out var refusal))
         {
+            _guard.Journal.Note(Text.T("{0}: could not resume — {1}", who, refusal));
             return BuildDocument(xml =>
             {
                 xml.WriteElementString("resume", "0");
@@ -695,6 +707,7 @@ internal sealed class GameStreamServer : IAsyncDisposable
             }, 503);
         }
 
+        _guard.Journal.Note(Text.T("{0} resumed the stream", who));
         return BuildDocument(xml =>
         {
             xml.WriteElementString("sessionUrl0", SessionUrl(reachedAt));
@@ -702,10 +715,26 @@ internal sealed class GameStreamServer : IAsyncDisposable
         });
     }
 
-    private string Cancel()
+    private string Cancel(string who)
     {
         _sessions.Cancel();
+        _guard.Journal.Note(Text.T("{0} quit the application", who));
         return BuildDocument(xml => xml.WriteElementString("cancel", "1"));
+    }
+
+    // A device as the journal names it: its paired name and address, or the address alone.
+    private static string Who(KnownClient? known, IPAddress? address)
+    {
+        var plain = address is null ? "?" : Peer.Plain(address).ToString();
+        return known is null ? plain : $"{known.Name} ({plain})";
+    }
+
+    private string AppName(int appId)
+    {
+        if (appId == AppParameters.Protocol.DesktopAppId) return Text.T("Desktop");
+
+        var gameId = _games.GameIdForClient(appId);
+        return gameId > 0 && _games.Target(gameId) is { } target ? $"«{target.Title}»" : $"#{appId}";
     }
 
     // Every answer is a root element carrying a status code. The declaration is written by hand:

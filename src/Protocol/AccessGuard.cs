@@ -39,14 +39,21 @@ internal sealed class AccessGuard
 
     private readonly AppConfig _config;
 
+    // Where failures, blocks and refusals are told, beside every other connection.
+    internal ConnectionJournal Journal { get; }
+    private readonly Dictionary<string, DateTime> _refusalNoted = new(StringComparer.OrdinalIgnoreCase);
+
     // Where the same thing is kept between runs, or null for a guard with no memory beyond this
     // process, which is what the tests use.
     private readonly BlockStore? _store;
 
-    internal AccessGuard(AppConfig config, BlockStore? store = null)
+    private void Note(string text) => Journal.Note(text);
+
+    internal AccessGuard(AppConfig config, BlockStore? store = null, ConnectionJournal? journal = null)
     {
         _config = config;
         _store = store;
+        Journal = journal ?? new ConnectionJournal();
 
         Restore();
     }
@@ -122,16 +129,27 @@ internal sealed class AccessGuard
         left = TimeSpan.Zero;
         if (!Watches(address)) return false;
 
+        var key = Key(address!);
+        bool note;
+
         lock (_gate)
         {
-            if (!_records.TryGetValue(Key(address!), out var record)) return false;
+            if (!_records.TryGetValue(key, out var record)) return false;
 
             var now = Clock();
             if (record.BlockedUntil <= now) return false;
 
             left = record.BlockedUntil - now;
-            return true;
+
+            // Once a minute per address: a scanner knocks many times a second.
+            note = !_refusalNoted.TryGetValue(key, out var last) || now - last >= TimeSpan.FromMinutes(1);
+            if (note) _refusalNoted[key] = now;
         }
+
+        if (note)
+            Note(Text.T("{0}: connection refused, blocked for {1} more min", key, Math.Ceiling(left.TotalMinutes)));
+
+        return true;
     }
 
     // One attempt that did not end in a pairing: a wrong PIN, a signature that did not verify, or
@@ -193,6 +211,12 @@ internal sealed class AccessGuard
         _store?.Remove(swept);
         _store?.Save(write);
 
+        Note(blocked
+            ? Text.T("{0}: blocked for {1} min after {2} failed attempts (block {3} in a row)",
+                     key, span.TotalMinutes.ToString("0", System.Globalization.CultureInfo.InvariantCulture),
+                     _config.BlockAfterFailures, blocks)
+            : Text.T("{0}: failed to pair, {1} of {2}", key, failures, _config.BlockAfterFailures));
+
         if (!blocked)
         {
             Log.Warn($"{peer} failed to pair ({why}). That is {failures} of " +
@@ -227,6 +251,7 @@ internal sealed class AccessGuard
         if (!had) return;
 
         _store?.Remove(new[] { key });
+        Note(Text.T("{0}: paired, its failed attempts are forgotten", key));
         Log.Info($"{Peer.Describe(address)} paired; its failed attempts are forgotten");
     }
 
@@ -274,6 +299,7 @@ internal sealed class AccessGuard
         }
 
         _store?.Remove(new[] { key });
+        Note(Text.T("{0}: unblocked from the page", key));
 
         Log.Event($"{Peer.Describe(parsed)} was let back in from the page; its attempts and the " +
                   "blocks it had run up are forgotten, and it is counted from nothing again.");

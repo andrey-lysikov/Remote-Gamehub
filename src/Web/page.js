@@ -29,6 +29,7 @@ if(wanted)who.innerHTML=f('[[A device calling itself <b>{0}</b> wants to pair wi
 const both=(await (await fetch('/?status=1')).text()).split('\n');
 $('host').innerHTML=both[0];$('status').innerHTML=both[1]||'';
 document.querySelectorAll('#games .game').forEach(el=>el.classList.toggle('running',el.dataset.id===(both[2]||'')));
+available(both[3]||'');
 const theme=(await (await fetch('/?theme=1')).text()).trim();
 if(theme&&document.documentElement.dataset.theme!==theme)document.documentElement.dataset.theme=theme;
 },1000);
@@ -43,31 +44,41 @@ if((await (await fetch('/?autologon=state')).text()).trim()==='on'){clearInterva
 al.innerHTML='<p>[[Automatic sign-in is on now. This host comes back on its own after a restart.]]</p>';}
 },5000);});}
 
-const logbox=$('logbox'),log=$('log'),shot=$('shot'),shotimg=$('shotimg'),shotsaid=$('shotsaid');
-let shotUrl='';
+const diag=$('diag'),log=$('log'),connlog=$('connlog'),output=$('output'),screenpane=$('pane-screen'),
+shot=$('shot'),shotimg=$('shotimg'),shotsaid=$('shotsaid');
+let pane='',shotUrl='';
+function available(list){const have=new Set(('log,connections,'+list).split(','));
+document.querySelectorAll('#diagbar button').forEach(b=>b.hidden=!have.has(b.dataset.pane));
+screenpane.classList.toggle('with-output',have.has('output'));
+if(pane&&!have.has(pane))openPane('');}
+function openPane(name){pane=name;
+document.querySelectorAll('#diagbar button').forEach(b=>b.classList.toggle('on',b.dataset.pane===name));
+document.querySelectorAll('#diag .pane').forEach(p=>p.hidden=p.id!=='pane-'+name);
+diag.classList.toggle('open',!!name);
+if(!name)shot.classList.remove('full');
+if(name==='screen')refreshShot();
+refreshPane(true);}
+$('diagbar').addEventListener('click',e=>{const b=e.target.closest('button[data-pane]');if(!b)return;
+openPane(pane===b.dataset.pane?'':b.dataset.pane);});
+async function fill(pre,url,toEnd){const atEnd=toEnd||pre.scrollTop+pre.clientHeight>=pre.scrollHeight-8;
+pre.textContent=await (await fetch(url)).text();if(atEnd)pre.scrollTop=pre.scrollHeight;}
+async function refreshPane(toEnd){try{
+if(pane==='log')await fill(log,'/?log=1',toEnd);
+if(pane==='connections'){await fill(connlog,'/?connections=1',toEnd);await reloadBlocked();await reloadClients();}
+if(pane==='screen'&&screenpane.classList.contains('with-output'))await fill(output,'/?output=1',toEnd);
+}catch{}}
+setInterval(()=>refreshPane(false),3000);
+setInterval(()=>{if(pane==='screen')refreshShot();},5000);
+available(diag.dataset.available);
 async function refreshShot(){
-if(!logbox.classList.contains('open')&&!shot.classList.contains('full'))return;
 try{const r=await fetch('/?screen=1&v='+Date.now());
 if((r.headers.get('Content-Type')||'').startsWith('image/')){const url=URL.createObjectURL(await r.blob());
 shotimg.onload=()=>{if(shotUrl)URL.revokeObjectURL(shotUrl);shotUrl=url;};shotimg.src=url;shot.classList.add('has');}
 else{shot.classList.remove('has','full');shotsaid.textContent=await r.text();}}catch{}}
-setInterval(refreshShot,5000);
 shot.addEventListener('click',e=>{
 if(e.target.id==='shotclose'){shot.classList.remove('full');return;}
 if(shot.classList.contains('has'))shot.classList.add('full');});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')shot.classList.remove('full');});
-$('logtoggle').addEventListener('click',()=>{logbox.classList.toggle('open');
-if(logbox.classList.contains('open')){log.scrollTop=log.scrollHeight;refreshShot();}});
-let logSource='log';
-async function refreshLog(toEnd){if(!logbox.classList.contains('open'))return;
-const atEnd=toEnd||log.scrollTop+log.clientHeight>=log.scrollHeight-8;
-log.textContent=await (await fetch('/?'+logSource+'=1')).text();
-if(atEnd)log.scrollTop=log.scrollHeight;}
-setInterval(()=>refreshLog(false),3000);
-$('logsrc').addEventListener('click',e=>{const b=e.target.closest('button[data-src]');if(!b)return;
-logSource=b.dataset.src;
-document.querySelectorAll('#logsrc button').forEach(x=>x.classList.toggle('on',x===b));
-refreshLog(true);});
 
 const games=$('games'),editor=$('editor'),title=$('title'),command=$('command'),folder=$('folder'),
 editorsaid=$('editorsaid'),arturl=$('arturl'),args=$('args'),nostream=$('nostream'),
@@ -191,13 +202,10 @@ await fetch('/?forget='+row.dataset.id);
 await reloadClients();});
 
 const blocked=$('blocked');
-if(blocked){
-const reloadBlocked=async()=>{
-blocked.innerHTML=await (await fetch('/?blocked=1')).text();};
-setInterval(reloadBlocked,5000);
+async function reloadBlocked(){blocked.innerHTML=await (await fetch('/?blocked=1')).text();}
 blocked.addEventListener('click',async e=>{
 const button=e.target.closest('button[data-do=unblock]');if(!button)return;
-const row=button.closest('.client');
+const row=button.closest('[data-ip]');
 if(!confirm(f('[[Let {0} back in? It is counted from nothing again.]]',row.dataset.ip)))return;
 await fetch('/?unblock='+encodeURIComponent(row.dataset.ip));
-await reloadBlocked();});}
+await reloadBlocked();});

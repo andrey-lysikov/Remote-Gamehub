@@ -235,7 +235,8 @@ internal sealed class WebConsole : IAsyncDisposable
             var runningId = RunningGameId();
             await WriteAsync(stream, 200, "text/html; charset=utf-8",
                 HostLine() + "\n" + Status() + "\n" +
-                (runningId != 0 ? runningId.ToString(CultureInfo.InvariantCulture) : string.Empty));
+                (runningId != 0 ? runningId.ToString(CultureInfo.InvariantCulture) : string.Empty) + "\n" +
+                Available());
             return;
         }
 
@@ -266,6 +267,14 @@ internal sealed class WebConsole : IAsyncDisposable
                 : (program.Running ? Text.T("{0} — running", program.Title) : Text.T("{0} — stopped", program.Title)) +
                   "\n\n" +
                   (program.Text.Length > 0 ? program.Text : Text.T("It has written nothing yet.")));
+            return;
+        }
+
+        if (request.Query("connections") is not null)
+        {
+            var journal = _guard.Journal.Contents();
+            await WriteAsync(stream, 200, "text/plain",
+                journal.Length > 0 ? journal : Text.T("Nothing has happened yet."));
             return;
         }
 
@@ -467,6 +476,13 @@ internal sealed class WebConsole : IAsyncDisposable
         await WriteAsync(stream, 200, "text/html; charset=utf-8", Page());
     }
 
+    // The diagnostics tabs that have something to show, for the page to hide the rest.
+    private string Available() => string.Join(",", new[]
+    {
+        _sessions.CurrentAppId != 0 ? "screen" : null,
+        _sessions.ProgramOutputAvailable ? "output" : null,
+    }.Where(name => name is not null));
+
     // Which row is streaming right now, found from the number the client started it by. Zero is
     // nothing or the desktop, and no tile carries that, so zero means none.
     private long RunningGameId()
@@ -559,17 +575,26 @@ internal sealed class WebConsole : IAsyncDisposable
     private string ClientsList()
     {
         var clients = _clients.All();
-        if (clients.Count == 0) return string.Empty;
 
         // The heading is part of the list rather than of the section around it, so that it comes
         // and goes with the rows when the page replaces them.
         var html = new StringBuilder($"<h2>{Text.T("Paired devices")}</h2>");
+        if (clients.Count == 0) html.Append($"<p class=q>{Text.T("No device has paired yet.")}</p>");
+
+        var streamingTo = _sessions.Status is { Streaming: true } stream && IPAddress.TryParse(stream.Client, out var to)
+            ? Peer.Plain(to).ToString()
+            : null;
 
         foreach (var client in clients)
         {
+            // Connected: heard from in the last half minute, or streaming to where it was heard from.
+            var connected = _guard.Journal.SeenRecently(client.Fingerprint) ||
+                            (streamingTo is not null && _guard.Journal.AddressOf(client.Fingerprint) == streamingTo);
+
             html.Append($"<div class=client data-id={client.Id} " +
                         $"data-name=\"{Escape(client.Name)}\">");
-            html.Append($"<b>{Escape(client.Name)}</b>");
+            html.Append($"<b>{Escape(client.Name)}</b>" +
+                        (connected ? $"<span class=tag>{Text.T("connected")}</span>" : string.Empty));
             html.Append("<span class=q>" + Text.T("last seen {0} · paired {1}",
                             client.LastSeenAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
                             client.PairedAt.LocalDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) +
@@ -581,44 +606,20 @@ internal sealed class WebConsole : IAsyncDisposable
         return html.ToString();
     }
 
-    // How much of a block is left, in the words a line has room for. Blocks run from minutes to
-    // most of a day once an address has earned a few in a row, so both ends are worth saying.
-    private static string Remaining(TimeSpan left) => left.TotalMinutes switch
-    {
-        < 1 => Text.T("under a minute left"),
-        < 60 => Text.T("{0} min left", left.TotalMinutes.ToString("0", CultureInfo.InvariantCulture)),
-        _ => Text.T("{0} h {1} min left", (int)left.TotalHours, left.Minutes),
-    };
-
-    // The addresses being refused right now, the busiest three of them. Only while the ports are
-    // forwarded: with nothing forwarded nothing outside can knock, and a count of nobody is noise.
+    // The addresses refused right now on one line, busiest first, each with its attempts and a
+    // button to let it back in. Empty while the ports are not forwarded: nothing outside can knock.
     private string BlockedList()
     {
         if (!_guard.IsOn) return string.Empty;
 
         var blocked = _guard.Blocked();
-        var shown = Math.Min(3, blocked.Count);
+        if (blocked.Count == 0) return $"<span class=q>{Text.T("No address is blocked.")}</span>";
 
-        // The heading and the count belong to the list rather than to the section around it, so
-        // that they are replaced together when the page fetches this again.
-        var html = new StringBuilder($"<h2>{Text.T("Refused addresses")}</h2>");
-        html.Append("<div class=banline>" + Text.T("banned {0} ip", blocked.Count) +
-                    (shown > 0 ? Text.T(", top {0} is:", shown) : string.Empty) + "</div>");
-
-        foreach (var peer in blocked.Take(shown))
+        var html = new StringBuilder($"<span class=q>{Text.T("Blocked:")}</span>");
+        foreach (var peer in blocked)
         {
-            html.Append($"<div class=client data-ip=\"{Escape(peer.Address)}\">");
-            html.Append($"<b>{Escape(peer.Address)}</b>");
-
-            // The run of blocks is only worth a word once there has been more than one: it is
-            // what says this address will be refused for longer and longer.
-            html.Append("<span class=q>" + Text.T("{0} attempts", peer.Attempts) + $" · {Remaining(peer.Left)}" +
-                        (peer.Blocks > 1 ? Text.T(" · {0} blocks in a row", peer.Blocks) : string.Empty) +
-                        "</span>");
-
-            html.Append($"<button data-do=unblock title=\"{Text.T("Let back in")}\" class=danger>" +
-                        $"{TrashIcon}</button>");
-            html.Append("</div>");
+            html.Append($"<span class=ban data-ip=\"{Escape(peer.Address)}\">{Escape(peer.Address)} " +
+                        $"({peer.Attempts})<button data-do=unblock title=\"{Text.T("Let back in")}\">×</button></span>");
         }
 
         return html.ToString();
@@ -652,11 +653,8 @@ internal sealed class WebConsole : IAsyncDisposable
             ("games", GamesList()),
             ("clients", ClientsList()),
 
-            // Only while the ports are forwarded: with nothing forwarded nobody outside can knock,
-            // and a list of who was turned away is a list of nobody.
-            ("blockedbox", _guard.IsOn
-                ? WebAssets.Fill(WebAssets.Part("blocked"), ("blocked", BlockedList()))
-                : string.Empty),
+            ("blocked", BlockedList()),
+            ("available", Available()),
 
             ("pointer", WebAssets.Part("pointer")),
 

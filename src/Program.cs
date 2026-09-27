@@ -423,12 +423,15 @@ internal static class Program
 
         // Owns whatever is streaming. Created before the listeners, because the first thing a
         // client does after finding this machine may be to ask it to start.
+        // Every connection and what came of it, for the page; shared by everything that sees one.
+        var journal = new ConnectionJournal();
+
         using var sessions = new SessionManager(config, preflight.Output!, encoder, games,
-                                                gamepads, tray, session, scales);
+                                                gamepads, tray, session, scales, journal);
 
         // Stops outside addresses hammering forwarded ports; refuses nobody unless Upnp is on, and
         // keeps its counts in the database so a restarted worker hands out no clean slate.
-        var guard = new AccessGuard(config, new BlockStore(database));
+        var guard = new AccessGuard(config, new BlockStore(database), journal);
 
         var pairing = new PairingManager(identity, clients, guard);
 

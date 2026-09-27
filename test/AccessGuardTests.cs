@@ -332,4 +332,28 @@ public class AccessGuardTests
 
         Assert.False(after.IsBlocked(Outside, out _));
     }
+
+    [Fact]
+    public void The_journal_tells_the_failures_the_block_the_refusals_and_the_release()
+    {
+        var (guard, move) = Wound(failures: 2);
+
+        guard.Failed(Outside, "a wrong PIN");
+        guard.Failed(Outside, "a wrong PIN");
+        guard.IsBlocked(Outside, out _);
+        guard.IsBlocked(Outside, out _);
+        move(1);
+        guard.IsBlocked(Outside, out _);
+        guard.Release(Outside.ToString());
+        guard.Failed(Inside, "never counted");
+
+        // Refusals once a minute per address, however often it knocks.
+        var lines = guard.Journal.Contents().Split('\n');
+        Assert.Equal(5, lines.Length);
+        Assert.Contains("203.0.113.7: failed to pair, 1 of 2", lines[0]);
+        Assert.Contains("203.0.113.7: blocked for 15 min after 2 failed attempts (block 1 in a row)", lines[1]);
+        Assert.Contains("203.0.113.7: connection refused, blocked for 15 more min", lines[2]);
+        Assert.Contains("203.0.113.7: connection refused, blocked for 14 more min", lines[3]);
+        Assert.Contains("203.0.113.7: unblocked from the page", lines[4]);
+    }
 }

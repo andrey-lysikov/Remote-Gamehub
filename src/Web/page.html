@@ -18,8 +18,6 @@
 
 <div id=games>{{games}}</div>
 
-<section id=clientsbox><div id=clients>{{clients}}</div></section>
-{{blockedbox}}
 
 <dialog id=editor><form method=dialog>
 <h2 id=editortitle>[[Edit game]]</h2>
@@ -55,7 +53,14 @@
 <div id=pickgrid></div>
 </dialog>
 
-<footer id=logbox><div id=logpane><pre id=log>{{log}}</pre><div id=shot title="[[Open full screen]]"><img id=shotimg alt=""><span id=shotsaid>[[Nothing is running.]]</span><button type=button id=shotclose>[[Close]]</button></div></div><div id=logbar><button id=logtoggle>[[Log]]</button><span id=logsrc><button type=button data-src=log class=on>[[Server log]]</button><button type=button data-src=output>[[Program output]]</button></span></div></footer>
+<footer id=diag data-available="{{available}}">
+<div id=diagpane>
+<section class=pane id=pane-log hidden><pre id=log>{{log}}</pre></section>
+<section class=pane id=pane-connections hidden><div class=main><pre id=connlog></pre><div id=blocked class=banrow>{{blocked}}</div></div><div id=clients class=side>{{clients}}</div></section>
+<section class=pane id=pane-screen hidden><div id=shot title="[[Open full screen]]"><img id=shotimg alt=""><span id=shotsaid>[[Nothing is running.]]</span><button type=button id=shotclose>[[Close]]</button></div><pre id=output></pre></section>
+</div>
+<nav id=diagbar><span>[[Diagnostics]]</span><button type=button data-pane=log>[[Server log]]</button><button type=button data-pane=connections>[[Connections]]</button><button type=button data-pane=screen>[[Screen]]</button></nav>
+</footer>
 <script>{{script}}</script>
 
 <!--part:autologon-->
@@ -64,9 +69,6 @@
 <p>[[Windows can sign <b>{{account}}</b> in automatically. The password is typed into Windows' own settings window and kept by Windows; this server never sees it. Understand what that means first: anybody who switches the machine on lands on that desktop without a password, and a BitLocker drive with no start-up PIN unlocks on its own with it. Locking the screen right after sign-in keeps the machine shut while this host stays reachable: the lock screen is streamed and unlocked from the client.]]</p>
 <div class=row><button id=alopen class=primary>[[Open Windows sign-in settings]]</button><span id=alsaid class=q></span></div>
 </section>
-
-<!--part:blocked-->
-<section id=blockedbox><div id=blocked>{{blocked}}</div></section>
 
 <!--part:pointer-->
 <label class=switch><input type=checkbox id=pointer><span>[[Enable software mouse cursor]]</span></label>

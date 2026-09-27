@@ -30,6 +30,7 @@ internal sealed class SessionManager : IDisposable
     private readonly TrayIcon _tray;
     private readonly SessionWatch _sessionWatch;
     private readonly ScaleStore _scales;
+    private readonly ConnectionJournal _journal;
     private readonly object _gate = new();
 
     private LaunchRequest? _pending;
@@ -57,7 +58,7 @@ internal sealed class SessionManager : IDisposable
 
     internal SessionManager(AppConfig config, DisplayOutput output, EncoderCapabilities encoder,
                             GameLibrary games, GamepadHub gamepads, TrayIcon tray,
-                            SessionWatch sessionWatch, ScaleStore scales)
+                            SessionWatch sessionWatch, ScaleStore scales, ConnectionJournal journal)
     {
         _config = config;
         _output = output;
@@ -67,6 +68,7 @@ internal sealed class SessionManager : IDisposable
         _tray = tray;
         _sessionWatch = sessionWatch;
         _scales = scales;
+        _journal = journal;
 
         AdoptProgram();
     }
@@ -90,6 +92,15 @@ internal sealed class SessionManager : IDisposable
         }
 
         lock (_gate) _program = _lastProgram = program;
+    }
+
+    // Whether a program started here runs now, so there is output to show beside the screen.
+    internal bool ProgramOutputAvailable
+    {
+        get
+        {
+            lock (_gate) return _program is { IsRunning: true, CapturesOutput: true };
+        }
     }
 
     // The last program's title, what it wrote, and whether it still runs; null before any started.
@@ -484,6 +495,7 @@ internal sealed class SessionManager : IDisposable
             }
 
             session.Start();
+            _journal.Note(Text.T("stream to {0} started: {1}", negotiation.ClientAddress, session.Detail()));
         }
         catch (Exception error)
         {
@@ -711,6 +723,7 @@ internal sealed class SessionManager : IDisposable
         if (session is null) return;
 
         Log.Event("the stream ended");
+        if (!session.IsNotice) _journal.Note(Text.T("stream to {0} ended", session.Negotiation.ClientAddress));
         session.Dispose();
         _tray.SetState("waiting for a client");
     }
@@ -1065,6 +1078,8 @@ internal sealed class StreamSession : IDisposable
     private readonly ScaleStore _scales;
 
     internal int AppId { get; }
+
+    internal bool IsNotice => _notice is not null;
 
     // Set for a program without a stream: a card saying so, then a clean end. No capture, no sound.
     private readonly string? _notice;

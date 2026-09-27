@@ -20,6 +20,9 @@ internal sealed class HostProgram : IDisposable
     // Empty for a program taken back after a restart: its pipe ended with the old worker.
     internal ProgramOutput Output { get; }
 
+    // False for a program taken back after a restart: nothing reads its output any more.
+    internal bool CapturesOutput { get; }
+
     internal long GameId { get; }
     internal int AppId { get; }
     internal string Title { get; }
@@ -42,10 +45,11 @@ internal sealed class HostProgram : IDisposable
     }
 
     private HostProgram(Process process, long gameId, int appId, string title, DateTime startedAt,
-                        Action<long> finished, ProgramOutput output)
+                        Action<long> finished, ProgramOutput output, bool capturesOutput = true)
     {
         _process = process;
         Output = output;
+        CapturesOutput = capturesOutput;
         GameId = gameId;
         AppId = appId;
         Title = title;
@@ -125,7 +129,7 @@ internal sealed class HostProgram : IDisposable
 
             Log.Info($"\"{title}\" is still running without a stream (pid {record.ProcessId}); " +
                      "it is watched again");
-            return new HostProgram(process, record.GameId, appId, title, started, finished, new ProgramOutput());
+            return new HostProgram(process, record.GameId, appId, title, started, finished, new ProgramOutput(), capturesOutput: false);
         }
         catch (Exception)
         {
