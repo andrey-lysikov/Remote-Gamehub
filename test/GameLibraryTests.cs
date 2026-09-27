@@ -237,6 +237,32 @@ public class GameLibraryTests
     }
 
     [Fact]
+    public void One_file_can_be_added_by_hand_as_several_games()
+    {
+        using var folder = new TestFolder();
+        using var database = Database.Open(folder.Path);
+        var library = new GameLibrary(database);
+
+        var games = Path.Combine(folder.Path, "games");
+        var exe = folder.File(@"games\Alpha\alpha.exe");
+        library.Rescan(FoldersOnly(games));
+
+        var first = library.Save(0, "Alpha windowed", exe, null, "-windowed");
+        var second = library.Save(0, "Alpha server", exe, null, "-server", noStream: true);
+        library.Save(second, "Alpha server", exe, null, "-server -port 1");
+        library.Rescan(FoldersOnly(games));
+
+        Assert.NotEqual(first, second);
+        Assert.Equal(new[] { "Alpha", "Alpha server", "Alpha windowed" }, library.List().Select(g => g.Title));
+
+        // The name is what must differ: taken by another tile in any case, free for the tile itself.
+        Assert.True(library.TitleTaken(0, "alpha SERVER"));
+        Assert.True(library.TitleTaken(first, "Alpha"));
+        Assert.False(library.TitleTaken(second, "Alpha server"));
+        Assert.False(library.TitleTaken(0, "Alpha again"));
+    }
+
+    [Fact]
     public void Artwork_is_recorded_and_only_offered_to_games_without_it()
     {
         using var folder = new TestFolder();

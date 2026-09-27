@@ -377,6 +377,13 @@ internal sealed class WebConsole : IAsyncDisposable
                 return;
             }
 
+            if (_games.TitleTaken(toSave, title))
+            {
+                await WriteAsync(stream, 200, "text/plain",
+                    Text.T("There is already a game named \"{0}\". Choose another name.", title));
+                return;
+            }
+
             // Save answers with the row's identifier, which is the new one when a game is being
             // added: the pointer switch belongs to that row and is written straight after.
             var saved = _games.Save(toSave, title, command, folder,

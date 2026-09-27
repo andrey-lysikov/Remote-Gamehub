@@ -23,10 +23,10 @@
 <h2 id=editortitle>[[Edit game]]</h2>
 <div class=tabs id=tabs><button type=button data-tab=main class=on>[[Game]]</button><button type=button data-tab=art>[[Cover]]</button><button type=button data-tab=stream id=streamtab>[[Streaming]]</button></div>
 <div class=tab id=tab-main>
-<label>[[Name]]<input id=title placeholder="[[As it should appear]]"></label>
-<label>[[Starts with]]<input id=command placeholder="[[A file, a shortcut, or steam://rungameid/…]]"></label>
+<label>[[Name]]<input id=title></label>
+<label>[[Starts with]]<input id=command></label>
 <label>[[Arguments]] <span class=hint>[[optional — added after what it starts with]]</span><input id=args></label>
-<label>[[From this folder]] <span class=hint>[[optional — many games look for their own files beside it]]</span><input id=folder placeholder="C:\Games\Something"></label>
+<label>[[From this folder]] <span class=hint>[[optional — many games look for their own files beside it]]</span><input id=folder></label>
 <label class=switch><input type=checkbox id=nostream><span>[[Launch only, no streaming]]</span></label>
 </div>
 <div class=tab id=tab-art hidden>
@@ -34,7 +34,7 @@
 <div class=row><button type=button id=find>[[Find by name]]</button><label class=upload>[[Upload]]<input type=file accept="image/*" hidden id=file></label></div>
 <p class=hint>[[Or copy a picture and press Ctrl+V here]]</p>
 <p class=hint>[[Best size: 600×800 px, portrait 3:4. Another shape gets transparent margins, it is never cropped.]]</p>
-<label>[[Or the address of a picture]] <span class=hint>[[any format — it is fetched and converted here]]</span><span class=row><input id=arturl placeholder="https://…/poster.webp"><button type=button id=fetch>[[Fetch]]</button></span></label>
+<label>[[Or the address of a picture]] <span class=hint>[[any format — it is fetched and converted here]]</span><span class=row><input id=arturl><button type=button id=fetch>[[Fetch]]</button></span></label>
 </div></div>
 </div>
 <div class=tab id=tab-stream hidden>

@@ -274,6 +274,57 @@ internal sealed class Database : IDisposable
             version = 15;
         }
 
+        if (version < 16)
+        {
+            // One command may now back several tiles added by hand (other arguments, another name);
+            // only scanned rows stay one per command, which the scan's upsert relies on.
+            Execute(_connection,
+                """
+                BEGIN;
+                CREATE TABLE games_new (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source         TEXT    NOT NULL,
+                    external_id    TEXT,
+                    title          TEXT    NOT NULL,
+                    launch_command TEXT    NOT NULL,
+                    install_path   TEXT,
+                    box_art_path   TEXT,
+                    first_seen_at  TEXT    NOT NULL,
+                    last_seen_at   TEXT    NOT NULL,
+                    art_checked_at TEXT,
+                    manual         INTEGER NOT NULL DEFAULT 0,
+                    removed_at     TEXT,
+                    art_manual     INTEGER NOT NULL DEFAULT 0,
+                    pointer        INTEGER NOT NULL DEFAULT 0,
+                    quality        INTEGER NOT NULL DEFAULT 2,
+                    starting_card  INTEGER NOT NULL DEFAULT 1,
+                    working_dir    TEXT,
+                    client_id      INTEGER,
+                    client_key     TEXT,
+                    arguments      TEXT,
+                    no_stream      INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT INTO games_new (id, source, external_id, title, launch_command, install_path,
+                    box_art_path, first_seen_at, last_seen_at, art_checked_at, manual, removed_at,
+                    art_manual, pointer, quality, starting_card, working_dir, client_id, client_key,
+                    arguments, no_stream)
+                SELECT id, source, external_id, title, launch_command, install_path,
+                    box_art_path, first_seen_at, last_seen_at, art_checked_at, manual, removed_at,
+                    art_manual, pointer, quality, starting_card, working_dir, client_id, client_key,
+                    arguments, no_stream
+                FROM games;
+                DROP TABLE games;
+                ALTER TABLE games_new RENAME TO games;
+                CREATE INDEX games_client_id ON games (client_id);
+                CREATE UNIQUE INDEX games_scanned ON games (source, launch_command)
+                    WHERE source <> 'by hand';
+                PRAGMA user_version = 16;
+                COMMIT;
+                """);
+
+            version = 16;
+        }
+
         Log.Info(from == version
             ? $"database {Path}, schema version {version}"
             : $"database {Path}, schema migrated from version {from} to {version}");

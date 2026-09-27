@@ -315,7 +315,7 @@ internal sealed class GameLibrary
             INSERT INTO games (source, external_id, title, launch_command,
                                install_path, working_dir, box_art_path, first_seen_at, last_seen_at)
             VALUES ($source, $external, $title, $launch, $install, $working, $art, $stamp, $stamp)
-            ON CONFLICT (source, launch_command) DO UPDATE SET
+            ON CONFLICT (source, launch_command) WHERE source <> 'by hand' DO UPDATE SET
                 external_id  = excluded.external_id,
                 -- What somebody typed outlives what a scanner reads: an edit says the scanner got
                 -- the name or folder wrong, and a scan must not silently undo it.
@@ -760,6 +760,27 @@ internal sealed class GameLibrary
                      (extra is null ? string.Empty : $" {extra}") +
                      (noStream ? ", without a stream" : string.Empty));
             return added;
+        }
+    }
+
+    // Whether another listed game already has this name; the name is what tells tiles apart,
+    // the file they start may repeat. Compared in C#, as SQLite's NOCASE folds only ASCII.
+    internal bool TitleTaken(long id, string title)
+    {
+        lock (_database.Gate)
+        {
+            using var command = _database.Command(
+                "SELECT title FROM games WHERE removed_at IS NULL AND id <> $id;");
+            command.Parameters.AddWithValue("$id", id);
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(0).Trim(), title.Trim(), StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
     }
 
