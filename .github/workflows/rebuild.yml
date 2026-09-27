@@ -50,7 +50,6 @@ jobs:
         shell: pwsh
         run: ./build.ps1
 
-      # The tests have already passed in the job above, which is why neither script runs them.
       - name: Build the installer
         shell: pwsh
         run: ./installer/installer.ps1 -Version ${{ steps.target.outputs.version }}

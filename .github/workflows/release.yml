@@ -78,7 +78,6 @@ jobs:
         shell: pwsh
         run: ./build.ps1
 
-      # The tests have already passed in the job above, which is why neither script runs them.
       - name: Build the installer
         if: steps.check.outputs.release == 'true'
         shell: pwsh
