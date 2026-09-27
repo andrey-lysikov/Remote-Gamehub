@@ -23,20 +23,28 @@
 
 <dialog id=editor><form method=dialog>
 <h2 id=editortitle>[[Edit game]]</h2>
+<div class=tabs id=tabs><button type=button data-tab=main class=on>[[Game]]</button><button type=button data-tab=art>[[Cover]]</button><button type=button data-tab=stream id=streamtab>[[Streaming]]</button></div>
+<div class=tab id=tab-main>
 <label>[[Name]]<input id=title placeholder="[[As it should appear]]"></label>
 <label>[[Starts with]]<input id=command placeholder="[[A file, a shortcut, or steam://rungameid/…]]"></label>
 <label>[[Arguments]] <span class=hint>[[optional — added after what it starts with]]</span><input id=args></label>
 <label>[[From this folder]] <span class=hint>[[optional — many games look for their own files beside it]]</span><input id=folder placeholder="C:\Games\Something"></label>
-<label class=switch><input type=checkbox id=nostream><span>[[Run without a stream — started on the host, shown as running, stopped with Quit]]</span></label>
-<div id=streamopts>
+<label class=switch><input type=checkbox id=nostream><span>[[Launch only, no streaming]]</span></label>
+</div>
+<div class=tab id=tab-art hidden>
+<div class=cover><div id=preview><span>[[no cover]]</span></div><div class=coverdo>
+<div class=row><button type=button id=find>[[Find by name]]</button><label class=upload>[[Upload]]<input type=file accept="image/*" hidden id=file></label></div>
+<p class=hint>[[Or copy a picture and press Ctrl+V here]]</p>
+<label>[[Or the address of a picture]] <span class=hint>[[any format — it is fetched and converted here]]</span><span class=row><input id=arturl placeholder="https://…/poster.webp"><button type=button id=fetch>[[Fetch]]</button></span></label>
+</div></div>
+</div>
+<div class=tab id=tab-stream hidden>
 {{pointer}}
 <div class=choice>[[Splash screen when game is starting]] <span class=hint>[[Auto hides it and shows the mouse while a launcher waits for you]]</span>
 <div class=segments id=splash><label><input type=radio name=splash value=1 checked><span>[[Auto]]</span></label><label><input type=radio name=splash value=2><span>[[Always]]</span></label><label><input type=radio name=splash value=0><span>[[Never]]</span></label></div></div>
 
 <label>[[Quality]] <span class=hint>[[lower for fast games, higher for quiet ones — a remote client drops one level]]</span><select id=quality><option value=0>[[Low]]</option><option value=1>[[Medium]]</option><option value=2>[[High]]</option><option value=3>[[Lossless]]</option></select></label>
 </div>
-<div id=coverbox><label>[[Cover]]<span class=row><button type=button id=find>[[Find by name]]</button><label class=upload>[[Upload]]<input type=file accept="image/*" hidden id=file></label></span></label>
-<label>[[Or the address of a picture]] <span class=hint>[[any format — it is fetched and converted here]]</span><span class=row><input id=arturl placeholder="https://…/poster.webp"><button type=button id=fetch>[[Fetch]]</button></span></label></div>
 <p id=editorsaid class=q></p>
 <div class="row end"><button type=button id=cancel>[[Cancel]]</button><button type=button id=save class=primary>[[Save]]</button></div>
 </form></dialog>

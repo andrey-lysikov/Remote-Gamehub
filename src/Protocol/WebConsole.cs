@@ -353,7 +353,8 @@ internal sealed class WebConsole : IAsyncDisposable
                 _games.RecordQuality(saved, (StreamQuality)level);
             }
 
-            await WriteAsync(stream, 200, "text/plain", Text.T("Saved."));
+            // The row's number on a second line: a cover chosen while adding is sent to it next.
+            await WriteAsync(stream, 200, "text/plain", Text.T("Saved.") + "\n" + saved);
             return;
         }
 
@@ -476,7 +477,7 @@ internal sealed class WebConsole : IAsyncDisposable
             // fetched again instead of being taken from the browser's cache under the same address.
             html.Append(game.ArtStamp != 0
                 ? $"<img class=art src=\"/?cover={game.Id}&amp;v={game.ArtStamp}\" alt=\"\" loading=lazy>"
-                : "<div class=\"art none\"><span>no cover</span></div>");
+                : $"<div class=\"art none\"><span>{Text.T("no cover")}</span></div>");
 
             // Always in the markup; the poll that follows the running one toggles the article's
             // class, and CSS alone decides whether this badge is seen.

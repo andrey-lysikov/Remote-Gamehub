@@ -52,11 +52,30 @@ log.textContent=await (await fetch('/?log=1')).text();
 if(atEnd)log.scrollTop=log.scrollHeight;},3000);
 
 const games=$('games'),editor=$('editor'),title=$('title'),command=$('command'),folder=$('folder'),
-editorsaid=$('editorsaid'),coverbox=$('coverbox'),arturl=$('arturl'),args=$('args'),nostream=$('nostream'),
-streamopts=$('streamopts');
-function showKind(){const off=nostream.checked;streamopts.style.display=off?'none':'';$('find').style.display=off?'none':'';}
+editorsaid=$('editorsaid'),arturl=$('arturl'),args=$('args'),nostream=$('nostream'),
+preview=$('preview'),streamtab=$('streamtab');
+let editing=0,pending=null,previewUrl='';
+function tab(name){document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
+document.querySelectorAll('#editor .tab').forEach(t=>t.hidden=t.id!=='tab-'+name);}
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(b)tab(b.dataset.tab);});
+function showKind(){const off=nostream.checked;streamtab.hidden=off;$('find').hidden=off;
+if(off&&streamtab.classList.contains('on'))tab('main');}
 nostream.addEventListener('change',showKind);
-let editing=0;
+function show(src){if(previewUrl&&src!==previewUrl){URL.revokeObjectURL(previewUrl);previewUrl='';}
+preview.style.backgroundImage=src?'url("'+src+'")':'';preview.classList.toggle('has',!!src);}
+function showStored(){if(!editing){show('');return;}
+const probe=new Image();probe.onload=()=>show(probe.src);probe.onerror=()=>show('');
+probe.src='/?cover='+editing+'&v='+Date.now();}
+async function sendCover(id,cover){
+const r=cover.blob?await fetch('/?upload='+id,{method:'POST',body:cover.blob})
+:await fetch('/?arturl='+id+'&url='+encodeURIComponent(cover.url));
+return r.text();}
+async function setCover(cover){
+if(!editing){pending=cover;
+if(cover.blob){show('');previewUrl=URL.createObjectURL(cover.blob);show(previewUrl);}else show(cover.url);
+editorsaid.textContent='[[The cover is added when the game is saved.]]';return;}
+editorsaid.textContent=cover.blob?'[[uploading…]]':'[[fetching…]]';
+editorsaid.textContent=await sendCover(editing,cover);showStored();await reload();}
 async function reload(){games.innerHTML=await (await fetch('/?games=1')).text();}
 const scansaid=$('scansaid');
 $('rescan').addEventListener('click',async e=>{const b=e.target;b.disabled=true;
@@ -78,15 +97,17 @@ quality.value=level===undefined?2:level;
 if(window.pointer)pointer.checked=pointerOn==='1';
 (document.querySelector('#splash input[value="'+cardOn+'"]')||document.querySelector('#splash input[value="1"]')).checked=true;
 editorsaid.textContent='';
-coverbox.style.display=id?'':'none';
-arturl.value='';
+arturl.value='';pending=null;tab('main');showStored();
 editor.showModal();title.focus();}
 $('cancel').addEventListener('click',()=>editor.close());
 $('save').addEventListener('click',async()=>{
 if(!title.value.trim()||!command.value.trim()){
 editorsaid.textContent='[[A game needs a name and something to start.]]';return;}
 const r=await fetch('/?save='+editing+'&title='+encodeURIComponent(title.value)+'&command='+encodeURIComponent(command.value)+'&folder='+encodeURIComponent(folder.value)+'&args='+encodeURIComponent(args.value)+'&nostream='+(nostream.checked?1:0)+'&pointer='+(window.pointer&&pointer.checked?1:0)+'&quality='+quality.value+'&card='+document.querySelector('#splash input:checked').value);
-editorsaid.textContent=await r.text();await reload();editor.close();});
+const [said,id]=(await r.text()).split('\n');editorsaid.textContent=said;
+if(!id)return;
+if(pending){editorsaid.textContent=await sendCover(id,pending);pending=null;}
+await reload();editor.close();});
 const picker=$('picker'),pickname=$('pickname'),pickgrid=$('pickgrid'),
 picksaid=$('picksaid');
 async function search(){const name=pickname.value.trim();
@@ -111,18 +132,17 @@ $('picksearch').addEventListener('click',search);
 pickname.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();search();}});
 pickgrid.addEventListener('click',async e=>{const b=e.target.closest('.pick');if(!b)return;
 const img=b.querySelector('img');if(!img)return;
-picksaid.textContent='[[fetching…]]';
-const r=await fetch('/?arturl='+editing+'&url='+encodeURIComponent(img.currentSrc||img.src));
-editorsaid.textContent=await r.text();picker.close();await reload();});
+picker.close();await setCover({url:img.currentSrc||img.src});});
 picker.addEventListener('click',e=>{if(e.target===picker)picker.close();});
-$('fetch').addEventListener('click',async()=>{
-editorsaid.textContent='[[fetching…]]';
-const r=await fetch('/?arturl='+editing+'&url='+encodeURIComponent(arturl.value));
-editorsaid.textContent=await r.text();await reload();});
+$('fetch').addEventListener('click',()=>{const url=arturl.value.trim();
+if(!url){editorsaid.textContent='[[Paste the address of a picture.]]';return;}
+setCover({url});});
 $('file').addEventListener('change',async e=>{
-if(!e.target.files.length)return;editorsaid.textContent='[[uploading…]]';
-const r=await fetch('/?upload='+editing,{method:'POST',body:e.target.files[0]});
-editorsaid.textContent=await r.text();e.target.value='';await reload();});
+if(!e.target.files.length)return;const blob=e.target.files[0];e.target.value='';
+await setCover({blob});});
+editor.addEventListener('paste',e=>{
+const item=[...(e.clipboardData?e.clipboardData.items:[])].find(i=>i.type.startsWith('image/'));
+if(!item)return;e.preventDefault();tab('art');setCover({blob:item.getAsFile()});});
 
 games.addEventListener('click',async e=>{
 if(e.target.closest('#addtile')){open(0);return;}
