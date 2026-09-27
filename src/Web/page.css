@@ -40,7 +40,7 @@ border:1px solid var(--green-line);border-radius:.3rem;padding:.05rem .45rem}
 #host a.update:hover{background:var(--update-hover)}
 .dot{color:var(--fainter);margin:0 .15rem}
 
-#gamestools{align-items:center;margin:0 0 .6rem}
+#games{margin-top:.6rem}
 #games{display:grid;gap:1.25rem;grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width:760px){#games{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:520px){#games{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -102,6 +102,9 @@ button.primary{background:var(--primary);border-color:var(--primary-line)}
 button.primary:hover{background:var(--primary-hover)}
 .row{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
 .row.end{justify-content:flex-end;margin-top:.25rem}
+button.danger:hover{border-color:var(--danger-line);background:var(--danger-bg)}
+dialog.confirm{width:min(24rem,calc(100vw - 2rem))}
+dialog.confirm p{margin:0 0 1rem}
 .q{color:var(--dim);min-height:1.2em;margin:0}
 
 .card{border:1px solid var(--green-line);border-radius:.5rem;padding:1rem;margin-bottom:1.25rem}
@@ -196,6 +199,8 @@ border-left:1px solid var(--line)}
 #diagbar button{font-size:12px;padding:.2rem .7rem;color:var(--dim)}
 #diagbar button[hidden]{display:none}
 #diagbar button.on{background:var(--primary);border-color:var(--primary-line);color:var(--ink)}
+#hosttools{margin-left:auto;display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
+#hosttools .sep{width:1px;height:1.1rem;background:var(--line);margin:0 .3rem}
 #shot{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:.5rem}
 #pane-screen.with-output #shot{flex:0 0 40%;border-right:1px solid var(--line)}
 #output{display:none}

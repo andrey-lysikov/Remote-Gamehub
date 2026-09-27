@@ -1,5 +1,9 @@
 const $=id=>document.getElementById(id);
 const f=(s,...v)=>s.replace(/\{(\d)\}/g,(_,i)=>v[i]);
+const confirmbox=$('confirm');
+function ask(text){$('confirmtext').textContent=text;confirmbox.returnValue='';
+confirmbox.showModal();$('confirmno').focus();
+return new Promise(done=>confirmbox.addEventListener('close',()=>done(confirmbox.returnValue==='yes'),{once:true}));}
 
 const pin=$('pin'),devname=$('devname'),said=$('said'),card=$('pair'),who=$('who'),
 clients=$('clients');
@@ -48,11 +52,11 @@ const diag=$('diag'),log=$('log'),connlog=$('connlog'),output=$('output'),screen
 shot=$('shot'),shotimg=$('shotimg'),shotsaid=$('shotsaid');
 let pane='',shotUrl='';
 function available(list){const have=new Set(('log,connections,'+list).split(','));
-document.querySelectorAll('#diagbar button').forEach(b=>b.hidden=!have.has(b.dataset.pane));
+document.querySelectorAll('#diagbar button[data-pane]').forEach(b=>b.hidden=!have.has(b.dataset.pane));
 screenpane.classList.toggle('with-output',have.has('output'));
 if(pane&&!have.has(pane))openPane('');}
 function openPane(name){pane=name;
-document.querySelectorAll('#diagbar button').forEach(b=>b.classList.toggle('on',b.dataset.pane===name));
+document.querySelectorAll('#diagbar button[data-pane]').forEach(b=>b.classList.toggle('on',b.dataset.pane===name));
 document.querySelectorAll('#diag .pane').forEach(p=>p.hidden=p.id!=='pane-'+name);
 diag.classList.toggle('open',!!name);
 if(!name)shot.classList.remove('full');
@@ -111,6 +115,13 @@ $('rescan').addEventListener('click',async e=>{const b=e.target;b.disabled=true;
 scansaid.textContent=await (await fetch('/?rescan=1')).text();
 setTimeout(reload,2000);
 setTimeout(()=>{reload();scansaid.textContent='';b.disabled=false;},6000);});
+$('hosttools').addEventListener('click',async e=>{const b=e.target.closest('button[data-power]');if(!b)return;
+const power=b.dataset.power;
+if(!await ask(power==='restart'?'[[Are you sure you want to restart the host? Running games and streams will be closed.]]':'[[Are you sure you want to shut down the host? It cannot be switched on again from here.]]'))return;
+const tools=document.querySelectorAll('#hosttools button');tools.forEach(b=>b.disabled=true);
+setTimeout(()=>tools.forEach(b=>b.disabled=false),15000);
+try{scansaid.textContent=await (await fetch('/?power='+power,{method:'POST'})).text();}
+catch{scansaid.textContent='[[The host did not answer.]]';}});
 const checkversion=$('checkversion');
 checkversion.addEventListener('click',async e=>{e.preventDefault();
 if(checkversion.dataset.busy)return;checkversion.dataset.busy='1';
@@ -184,20 +195,20 @@ if(button.dataset.do==='start'){button.disabled=true;
 scansaid.textContent=await (await fetch('/?start='+tile.dataset.id)).text();
 await reload();setTimeout(()=>{scansaid.textContent='';},5000);return;}
 if(button.dataset.do==='remove'){
-if(!confirm(f('[[Remove {0} from the list?]]',tile.dataset.title)))return;
+if(!await ask(f('[[Remove {0} from the list?]]',tile.dataset.title)))return;
 await fetch('/?remove='+tile.dataset.id);await reload();return;}
 if(button.dataset.do==='reset'){
-if(!confirm(f('[[Reset {0} to what was found? Its name, command, folder, cover and settings go back to the defaults.]]',tile.dataset.title)))return;
+if(!await ask(f('[[Reset {0} to what was found? Its name, command, folder, cover and settings go back to the defaults.]]',tile.dataset.title)))return;
 button.disabled=true;scansaid.textContent=await (await fetch('/?reset='+tile.dataset.id)).text();
 setTimeout(reload,2000);setTimeout(()=>{reload();scansaid.textContent='';},6000);return;}
 if(button.dataset.do==='stop'){
-if(!confirm(f('[[Stop {0}?]]',tile.dataset.title)))return;
+if(!await ask(f('[[Stop {0}?]]',tile.dataset.title)))return;
 await fetch('/?stop=1');await reload();}});
 
 clients.addEventListener('click',async e=>{
 const button=e.target.closest('button[data-do=forget]');if(!button)return;
 const row=button.closest('.client');
-if(!confirm(f('[[Forget {0}? It will have to pair again.]]',row.dataset.name)))return;
+if(!await ask(f('[[Forget {0}? It will have to pair again.]]',row.dataset.name)))return;
 await fetch('/?forget='+row.dataset.id);
 await reloadClients();});
 
@@ -206,6 +217,6 @@ async function reloadBlocked(){blocked.innerHTML=await (await fetch('/?blocked=1
 blocked.addEventListener('click',async e=>{
 const button=e.target.closest('button[data-do=unblock]');if(!button)return;
 const row=button.closest('[data-ip]');
-if(!confirm(f('[[Let {0} back in? It is counted from nothing again.]]',row.dataset.ip)))return;
+if(!await ask(f('[[Let {0} back in? It is counted from nothing again.]]',row.dataset.ip)))return;
 await fetch('/?unblock='+encodeURIComponent(row.dataset.ip));
 await reloadBlocked();});

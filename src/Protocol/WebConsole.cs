@@ -31,7 +31,6 @@ internal sealed class WebConsole : IAsyncDisposable
     private readonly EncoderCapabilities _encoder;
     private readonly UpdateChecker _updates;
     private readonly string _directory;
-    private readonly DateTimeOffset _started = DateTimeOffset.Now;
     private readonly CancellationTokenSource _stopping = new();
 
     private TcpListener? _listener;
@@ -189,6 +188,18 @@ internal sealed class WebConsole : IAsyncDisposable
 
             await WriteAsync(stream, 200, "text/plain",
                 rescan is null ? Text.T("The scan is not ready yet.") : Text.T("Scanning…"));
+            return;
+        }
+
+        // Restart or switch off the machine. POST only, so a link or an image on another page the
+        // browser has open cannot do it. Windows takes seconds to close things; the answer fits in them.
+        if (request.Query("power") is "restart" or "shutdown" && request.Method == "POST")
+        {
+            var restart = request.Query("power") == "restart";
+            var accepted = MachinePower.Initiate(restart);
+            await WriteAsync(stream, 200, "text/plain", !accepted
+                ? Text.T("Windows refused; the log says why.")
+                : restart ? Text.T("Restarting…") : Text.T("Shutting down…"));
             return;
         }
 
@@ -720,12 +731,10 @@ internal sealed class WebConsole : IAsyncDisposable
             : Text.T("waiting for a client");
     }
 
-    // What this machine is, on the heading's line: host name, encoder, games and uptime. Off or
+    // What this machine is, on the heading's line: host name, encoder and games. Off or
     // unavailable is left out, so the line is only what this machine can do right now.
     private string HostLine()
     {
-        var uptime = DateTimeOffset.Now - _started;
-
         var machine = new List<string> { Escape(_identity.HostName) };
 
         if (_encoder.Refusal is null)
@@ -750,8 +759,6 @@ internal sealed class WebConsole : IAsyncDisposable
         // client whose controller does nothing has one question, and an absent line answers it.
         if (_gamepads.IsAvailable) machine.Add(Escape(_gamepads.Driver));
 
-        machine.Add(Text.T("up {0}", Escape(Describe(uptime))));
-
         if (_config.Upnp) machine.Add("uPnP");
 
         // A newer release, when the daily check has found one. Last on this line, because it is
@@ -764,12 +771,6 @@ internal sealed class WebConsole : IAsyncDisposable
 
         return string.Join(" <span class=dot>·</span> ", machine);
     }
-
-    private static string Describe(TimeSpan span) => span.TotalDays >= 1
-        ? Text.T("{0} d {1} h", (int)span.TotalDays, span.Hours)
-        : span.TotalHours >= 1
-            ? Text.T("{0} h {1} min", (int)span.TotalHours, span.Minutes)
-            : Text.T("{0} min", (int)span.TotalMinutes);
 
     // The end of the log file, read while the server is still writing to it — hence the sharing
     // flags. Cut at the first line break, so the page never opens on half a line.

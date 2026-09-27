@@ -14,8 +14,6 @@
 </section>
 {{autologon}}
 
-<div class="row end" id=gamestools><span id=scansaid class=q></span><button id=rescan>[[Rescan games]]</button></div>
-
 <div id=games>{{games}}</div>
 
 
@@ -48,6 +46,11 @@
 <div class="row end"><button type=button id=cancel>[[Cancel]]</button><button type=button id=save class=primary>[[Save]]</button></div>
 </form></dialog>
 
+<dialog id=confirm class=confirm><form method=dialog>
+<p id=confirmtext></p>
+<div class="row end"><button value=no id=confirmno>[[Cancel]]</button><button value=yes class=danger>[[Yes]]</button></div>
+</form></dialog>
+
 <dialog id=picker>
 <div class=row><input id=pickname placeholder="[[The name to look for]]"><button type=button id=picksearch class=primary>[[Search]]</button></div>
 <p id=picksaid class=q></p>
@@ -60,7 +63,7 @@
 <section class=pane id=pane-connections hidden><div class=main><pre id=connlog></pre><div id=blocked class=banrow>{{blocked}}</div></div><div id=clients class=side>{{clients}}</div></section>
 <section class=pane id=pane-screen hidden><div id=shot title="[[Open full screen]]"><img id=shotimg alt=""><span id=shotsaid>[[Nothing is running.]]</span><button type=button id=shotclose>[[Close]]</button></div><pre id=output></pre></section>
 </div>
-<nav id=diagbar><span>[[Diagnostics]]</span><button type=button data-pane=log>[[Server log]]</button><button type=button data-pane=connections>[[Connections]]</button><button type=button data-pane=screen>[[Screen]]</button></nav>
+<nav id=diagbar><span>[[Diagnostics]]</span><button type=button data-pane=log>[[Server log]]</button><button type=button data-pane=connections>[[Connections]]</button><button type=button data-pane=screen>[[Screen]]</button><div id=hosttools><span id=scansaid class=q></span><button type=button id=rescan>[[Rescan games]]</button><i class=sep></i><button type=button data-power=restart class=danger>[[Restart host]]</button><button type=button data-power=shutdown class=danger>[[Shut down host]]</button></div></nav>
 </footer>
 <script>{{script}}</script>
 

@@ -161,6 +161,22 @@ internal static class Advapi32
                                                     ref StartupInfo startupInfo,
                                                     out ProcessInformation processInformation);
 
+    // Held but off by default, like the three above; InitiateShutdown refuses without it.
+    internal const string SE_SHUTDOWN_NAME = "SeShutdownPrivilege";
+
+    // InitiateShutdown flags: the others' applications are closed without asking, because nobody
+    // at the client can answer a "this app is preventing shutdown" screen.
+    internal const uint SHUTDOWN_FORCE_OTHERS = 0x00000001;
+    internal const uint SHUTDOWN_FORCE_SELF = 0x00000002;
+    internal const uint SHUTDOWN_RESTART = 0x00000004;
+    internal const uint SHUTDOWN_POWEROFF = 0x00000008;
+    internal const uint SHTDN_REASON_FLAG_PLANNED = 0x80000000;
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode,
+               EntryPoint = "InitiateShutdownW")]
+    internal static extern uint InitiateShutdown(string? machine, string? message, uint gracePeriod,
+                                                 uint flags, uint reason);
+
     // Switches one privilege on in this process's own token. False when it is not held at all:
     // a process that is not LocalSystem has none of the three above, and says so once in the log.
     internal static bool EnablePrivilege(string name)
