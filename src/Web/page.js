@@ -69,7 +69,7 @@ if(checkversion.dataset.busy)return;checkversion.dataset.busy='1';
 checkversion.textContent='[[Checking…]]';
 try{checkversion.textContent=await (await fetch('/?checkupdate=1')).text();}
 catch{checkversion.textContent='[[Check failed]]';}
-setTimeout(()=>{checkversion.textContent='[[Has new version?]]';delete checkversion.dataset.busy;},5000);});
+setTimeout(()=>{checkversion.textContent='Has new version?';delete checkversion.dataset.busy;},5000);});
 function open(id,name,starts,from,pointerOn,level,cardOn,extra,noStream){editing=id;
 $('editortitle').textContent=id?'[[Edit game]]':'[[Add a game]]';
 title.value=name||'';command.value=starts||'';folder.value=from||'';args.value=extra||'';
