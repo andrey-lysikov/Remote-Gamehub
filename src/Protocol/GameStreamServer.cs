@@ -171,10 +171,15 @@ internal sealed class GameStreamServer : IAsyncDisposable
 
                 if (known is not null) _clients.Touch(known.Fingerprint);
 
+                // Plain HTTP says nothing about who is asking, and a paired Moonlight starts there
+                // too; only a certificate tells an unpaired device apart. Pairing is noted on its own.
                 var plain = address is null ? "?" : Peer.Plain(address).ToString();
-                _guard.Journal.Seen(known?.Fingerprint ?? plain, plain, known is null
-                    ? Text.T("unpaired device {0}", plain)
-                    : Who(known, address));
+                if (secure)
+                {
+                    _guard.Journal.Seen(known?.Fingerprint ?? plain, plain, known is null
+                        ? Text.T("unpaired device {0}", plain)
+                        : Who(known, address));
+                }
 
                 Log.Info($"{peer} {(secure ? "https" : "http")} {request.Method} " +
                          $"{request.Path}{request.QueryForLog}" +

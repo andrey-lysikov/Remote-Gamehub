@@ -32,6 +32,9 @@ internal sealed class AccessGuard
 
         internal DateTime LastFailure;
         internal DateTime BlockedUntil;
+
+        // Fires when the block runs out, so the journal says so; kept here or the GC takes it.
+        internal System.Threading.Timer? EndTimer;
     }
 
     private readonly object _gate = new();
@@ -81,7 +84,11 @@ internal sealed class AccessGuard
                 };
 
                 _records[block.Address] = record;
-                if (record.BlockedUntil > now) blocked++;
+                if (record.BlockedUntil > now)
+                {
+                    blocked++;
+                    WatchEnd(block.Address, record);
+                }
             }
 
             // Rows the machine slept through: the same rule the guard applies while it runs, put
@@ -199,6 +206,7 @@ internal sealed class AccessGuard
                 span = BlockFor(record.Blocks);
                 record.BlockedUntil = now + span;
                 record.Failures = 0;
+                WatchEnd(key, record);
             }
 
             blocks = record.Blocks;
@@ -245,7 +253,8 @@ internal sealed class AccessGuard
 
         lock (_gate)
         {
-            had = _records.Remove(key);
+            had = _records.Remove(key, out var record);
+            record?.EndTimer?.Dispose();
         }
 
         if (!had) return;
@@ -295,7 +304,8 @@ internal sealed class AccessGuard
 
         lock (_gate)
         {
-            if (!_records.Remove(key)) return false;
+            if (!_records.Remove(key, out var record)) return false;
+            record.EndTimer?.Dispose();
         }
 
         _store?.Remove(new[] { key });
@@ -317,9 +327,43 @@ internal sealed class AccessGuard
             .Select(entry => entry.Key)
             .ToList();
 
-        foreach (var key in stale) _records.Remove(key);
+        foreach (var key in stale)
+        {
+            _records.Remove(key, out var record);
+            record?.EndTimer?.Dispose();
+        }
 
         return stale;
+    }
+
+    // Arms the note for the end of the record's current block. Called under the lock.
+    private void WatchEnd(string key, Record record)
+    {
+        record.EndTimer?.Dispose();
+
+        var until = record.BlockedUntil;
+        var due = until - Clock();
+        if (due < TimeSpan.Zero) due = TimeSpan.Zero;
+
+        // A second late on purpose: a timer a hair early would find the block still running.
+        record.EndTimer = new System.Threading.Timer(_ => BlockEnded(key, until), null,
+                                    due + TimeSpan.FromSeconds(1), Timeout.InfiniteTimeSpan);
+    }
+
+    // Only for the block the timer was armed for: a release or a longer block since then has its own.
+    private void BlockEnded(string key, DateTime until)
+    {
+        lock (_gate)
+        {
+            if (!_records.TryGetValue(key, out var record) || record.BlockedUntil != until || Clock() < until)
+                return;
+
+            record.EndTimer?.Dispose();
+            record.EndTimer = null;
+        }
+
+        Note(Text.T("{0}: block ended", key));
+        Log.Info($"{key} is no longer refused: its block ran out. Another failure blocks it for longer.");
     }
 
     private static DateTime Later(DateTime one, DateTime other) => one > other ? one : other;

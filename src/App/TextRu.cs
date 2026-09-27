@@ -140,6 +140,8 @@ internal static class TextRu
         ["{0}: failed to pair, {1} of {2}"] = "{0}: неудачная попытка сопряжения, {1} из {2}",
         ["{0}: paired, its failed attempts are forgotten"] = "{0}: сопряжение выполнено, неудачные попытки сброшены",
         ["{0}: unblocked from the page"] = "{0}: разблокирован со страницы",
+        ["{0}: block ended"] = "{0}: блокировка снята",
+        ["{0}, {1} min left"] = "{0}, ещё {1} мин",
         ["Server log"] = "Лог сервера",
         ["No program without a stream has been started yet."] = "Программы без трансляции ещё не запускались.",
         ["{0} — running"] = "{0} — работает",

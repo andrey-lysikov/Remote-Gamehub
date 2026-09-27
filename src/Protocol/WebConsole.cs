@@ -637,7 +637,7 @@ internal sealed class WebConsole : IAsyncDisposable
         foreach (var peer in blocked)
         {
             html.Append($"<span class=ban data-ip=\"{Escape(peer.Address)}\">{Escape(peer.Address)} " +
-                        $"({peer.Attempts})<button data-do=unblock title=\"{Text.T("Let back in")}\">×</button></span>");
+                        $"({Text.T("{0}, {1} min left", peer.Attempts, Math.Ceiling(peer.Left.TotalMinutes))})<button data-do=unblock title=\"{Text.T("Let back in")}\">×</button></span>");
         }
 
         return html.ToString();
