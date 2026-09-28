@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0
+
+* Allow programs without a stream (for example llama-server)
+* Russian interface, chosen automatically when Windows used it
+* Redesign Game editor split into tabs
+* Redesign Diagnostics bar (show preview and logs for running program)
+* Restart host and Shut down host buttons on status page
+* SQLite updated to 3.53
+
 ## 1.6
 
 * Clients now fetch a game's cover again when it changes

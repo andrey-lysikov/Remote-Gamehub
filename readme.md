@@ -2,9 +2,7 @@
 
 # Remote Game Hub
 
-A server written from scratch to do what [LizardByte Sunshine](https://app.lizardbyte.dev/Sunshine/)
-does: it speaks the NVIDIA Shield protocol (GameStream) and streams a Windows game host to its
-clients. Fully compatible with the stock
+A server speaks the NVIDIA Shield protocol (GameStream) and streams a Windows game host to its clients. Fully compatible with the stock
 [Moonlight clients](https://app.lizardbyte.dev/Sunshine/#Clients).
 
 [![Downloads](https://img.shields.io/github/downloads/andrey-lysikov/remote-gamehub/total)](https://github.com/andrey-lysikov/remote-gamehub/releases/latest)
@@ -18,6 +16,7 @@ clients. Fully compatible with the stock
 - High dynamic range when the screen supports it
 - Gamepad support, through [ViGEmBus](https://github.com/nefarius/ViGEmBus)
 - Games found automatically in the launchers — Steam, Xbox and Game Pass, Epic, GOG, EA, Battle.net — and in folders of your own
+- Allow create app starters for application without stream (like console or llm)
 - Cover art fetched automatically for the games found, from the store catalogue
 - Automatic discovery, so a client finds this machine without being given an address
 - Optional UPnP forwarding of the streaming ports, for playing over the internet (and anti-ddos system for this)
@@ -35,10 +34,11 @@ clients. Fully compatible with the stock
 
 ## Pairing
 
-There is nothing to set up. A client asks and shows four digits. You need to open the status page in a browser (example: http://localhost or http://hostname), and on the page you give the device a
+You need to open the status page in a browser (example: http://localhost or http://hostname), and on the page you give the device a
 name, type the digits and press Save.
 
 ## Tech
 
 - Written in C#, for Windows 11 or newer
 - A discrete NVIDIA or AMD card only.
+- Based on [LizardByte Sunshine](https://app.lizardbyte.dev/Sunshine/)
