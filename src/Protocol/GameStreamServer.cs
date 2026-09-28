@@ -367,8 +367,8 @@ internal sealed class GameStreamServer : IAsyncDisposable
         "/serverinfo" => ServerInfo(known, reachedAt),
         "/applist" => AppList(),
         "/pair" => await _pairing.HandleAsync(request, address, cancel),
-        "/launch" => Launch(request, address, reachedAt, Who(known, address)),
-        "/resume" => Resume(request, address, reachedAt, Who(known, address)),
+        "/launch" => Launch(request, address, reachedAt, Who(known, address), known?.Name),
+        "/resume" => Resume(request, address, reachedAt, Who(known, address), known?.Name),
         "/cancel" => Cancel(Who(known, address)),
         _ => null,
     };
@@ -580,9 +580,9 @@ internal sealed class GameStreamServer : IAsyncDisposable
 
     // Starts a session. The client sends the key its input and control messages are encrypted
     // with, what it wants to run, and a picture shape — the picture is agreed later over RTSP.
-    private string Launch(HttpRequest request, IPAddress? from, EndPoint? reachedAt, string who)
+    private string Launch(HttpRequest request, IPAddress? from, EndPoint? reachedAt, string who, string? name)
     {
-        var launch = ReadLaunchRequest(request);
+        var launch = ReadLaunchRequest(request) is { } asked ? asked with { ClientName = name } : null;
         if (launch is null)
             return LaunchRefused(400, Text.T("The launch request is missing or malforming a parameter " +
                                              "this server needs."));
@@ -689,9 +689,9 @@ internal sealed class GameStreamServer : IAsyncDisposable
 
     // Reattaches to a session already running. This server reports a running application only
     // while it is actually streaming, so this is asked when a client's own stream dropped.
-    private string Resume(HttpRequest request, IPAddress? from, EndPoint? reachedAt, string who)
+    private string Resume(HttpRequest request, IPAddress? from, EndPoint? reachedAt, string who, string? name)
     {
-        var resume = ReadLaunchRequest(request);
+        var resume = ReadLaunchRequest(request) is { } asked ? asked with { ClientName = name } : null;
         if (resume is null)
         {
             return BuildDocument(xml =>

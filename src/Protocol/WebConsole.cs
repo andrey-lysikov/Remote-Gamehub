@@ -720,14 +720,19 @@ internal sealed class WebConsole : IAsyncDisposable
         Text.T("A device calling itself <b>{0}</b> wants to pair with this machine.", Escape(clientName));
 
     // What is happening on this machine, which is the whole of the line under the heading: one
-    // client at a time, and its stream's own numbers while there is one.
+    // client at a time, and its stream's own numbers while there is one; else a program without one.
     private string Status()
     {
         var stream = _sessions.Status;
 
-        return stream.Streaming
-            ? Text.T("<span class=live>streaming</span> to {0}", stream.Client) + " " +
-              $"<span class=dot>·</span> {stream.Detail}"
+        if (stream.Streaming)
+        {
+            return "<span class=live>" + Text.T("Streaming to {0}", Escape(stream.ClientName ?? stream.Client)) +
+                   $"</span> <span class=dot>·</span> {stream.Detail}";
+        }
+
+        return _sessions.RunningProgram is { } program
+            ? "<span class=live>" + Text.T("Running {0}, without a stream", Escape(program)) + "</span>"
             : Text.T("waiting for a client");
     }
 

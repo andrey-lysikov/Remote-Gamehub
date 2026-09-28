@@ -22,7 +22,8 @@ internal static class TextRu
         ["{0} v{1} is available"] = "Доступна версия {0} v{1}",
         ["<b>Windows does not sign you in by itself.</b> Your account has a password, so after a restart this host cannot be reached until somebody signs in at the machine."] =
             "<b>Windows не входит в систему автоматически.</b> У вашей учётной записи есть пароль, поэтому после перезагрузки хост недоступен, пока кто-нибудь не войдёт в систему за самим компьютером.",
-        ["<span class=live>streaming</span> to {0}"] = "<span class=live>стрим</span> на {0}",
+        ["Streaming to {0}"] = "Трансляция на {0}",
+        ["Running {0}, without a stream"] = "Запущено приложение «{0}», без трансляции",
         ["a client is streaming from this machine; stop it first."] = "с этого компьютера уже идёт стрим; сначала остановите его.",
         ["A code is four digits."] = "Код — это четыре цифры.",
         ["A device calling itself <b>{0}</b> wants to pair with this machine."] = "Устройство <b>{0}</b> хочет выполнить сопряжение с этим компьютером.",

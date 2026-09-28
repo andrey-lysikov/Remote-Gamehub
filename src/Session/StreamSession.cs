@@ -13,10 +13,11 @@ using RemoteGameHub.Protocol;
 namespace RemoteGameHub.Session;
 
 // What a client asked for at /launch or /resume, before the RTSP negotiation fills in the rest.
-// The mode fields are zero/false when an older client sends none of them.
+// The mode fields are zero/false when an older client sends none of them. ClientName is the paired
+// device's name, known from its certificate at /launch; RTSP that follows has only the address.
 internal sealed record LaunchRequest(int AppId, byte[] RiKey, uint RiKeyId, int AudioChannels = 2,
                                      int Width = 0, int Height = 0, int Fps = 0,
-                                     bool HdrRequested = false);
+                                     bool HdrRequested = false, string? ClientName = null);
 
 // One client, streaming. /launch carries the encryption key but not the resolution or the codec,
 // which arrive in the RTSP ANNOUNCE, so the session is only built when the negotiation completes.
@@ -104,6 +105,15 @@ internal sealed class SessionManager : IDisposable
     }
 
     // The last program's title, what it wrote, and whether it still runs; null before any started.
+    // The title of the program without a stream running now, for the status line; null when none.
+    internal string? RunningProgram
+    {
+        get
+        {
+            lock (_gate) return _program is { IsRunning: true } program ? program.Title : null;
+        }
+    }
+
     internal (string Title, string Text, bool Running)? ProgramOutput
     {
         get
@@ -267,17 +277,18 @@ internal sealed class SessionManager : IDisposable
 
     // What is happening right now, in the words the status page uses. Under the same lock as the
     // rest, so it cannot describe a session that ended while it was being written out.
-    internal (bool Streaming, string Client, string Detail) Status
+    internal (bool Streaming, string Client, string? ClientName, string Detail) Status
     {
         get
         {
             lock (_gate)
             {
-                if (_session is null) return (false, string.Empty, string.Empty);
+                if (_session is null) return (false, string.Empty, null, string.Empty);
 
                 // The same few words the tray and the log carry. What is being sent, with nothing
                 // explained: the log is where the reasons are.
-                return (true, _session.Negotiation.ClientAddress.ToString(), _session.Detail());
+                return (true, _session.Negotiation.ClientAddress.ToString(), _session.ClientName,
+                        _session.Detail());
             }
         }
     }
@@ -962,6 +973,9 @@ internal sealed class StreamSession : IDisposable
     // The numbers this session was built from, for the status page to describe.
     internal StreamNegotiation Negotiation => _negotiation;
 
+    // The paired device's name from its launch; null when the launch did not know it.
+    internal string? ClientName { get; }
+
     // What is actually being sent rather than what was asked for. Set once the capture and the
     // encoder are open.
     internal int SentWidth { get; private set; }
@@ -1102,6 +1116,7 @@ internal sealed class StreamSession : IDisposable
     {
         _config = config;
         _output = output;
+        ClientName = request.ClientName;
         _preAdapted = preAdapted;
         _notice = notice;
         _scales = scales;
