@@ -10,7 +10,7 @@ using RemoteGameHub.App;
 namespace RemoteGameHub.Protocol;
 
 // mDNS, carrying the one service name Moonlight looks for, _nvstream._tcp, so a client finds this
-// machine without an address. The socket shares its port: Windows has a resolver on it already.
+// machine without an address. Published through Windows when it can; the own socket is the fallback.
 internal sealed class ServiceDiscovery : IDisposable
 {
     private const int MulticastPort = 5353;
@@ -42,6 +42,7 @@ internal sealed class ServiceDiscovery : IDisposable
     private readonly CancellationTokenSource _stopping = new();
 
     private UdpClient? _socket;
+    private WindowsDiscovery? _windows;
     private Task? _listening;
 
     // The last time each asking address was written to the log, so a client polling several times
@@ -64,6 +65,14 @@ internal sealed class ServiceDiscovery : IDisposable
 
     internal void Start()
     {
+        _windows = WindowsDiscovery.TryRegister(_instanceName, _hostRecordName, _config.HttpPort);
+        if (_windows is not null)
+        {
+            Log.Info($"\"{_instanceName}\" on port {_config.HttpPort} is published for automatic " +
+                     "discovery by Windows' own mDNS responder");
+            return;
+        }
+
         try
         {
             _socket = OpenSocket();
@@ -419,6 +428,7 @@ internal sealed class ServiceDiscovery : IDisposable
 
     public void Dispose()
     {
+        _windows?.Dispose();
         NetworkChange.NetworkAddressChanged -= OnNetworkChanged;
         _stopping.Cancel();
         _socket?.Dispose();

@@ -23,6 +23,7 @@ internal static class ConfFormat
         config.WebPort = file.Number("Network", "WebPort", config.WebPort,
             AppParameters.Limits.MinWebPort, AppParameters.Limits.MaxWebPort, warn);
         config.Upnp = file.Bool("Network", "Upnp", config.Upnp);
+        config.Firewall = file.Bool("Network", "Firewall", config.Firewall);
         config.BlockAfterFailures = file.Number("Network", "BlockAfterFailures",
             config.BlockAfterFailures, AppParameters.Limits.MinBlockAfterFailures,
             AppParameters.Limits.MaxBlockAfterFailures, warn);
@@ -75,6 +76,10 @@ internal static class ConfFormat
         writer.Blank();
         writer.Note("Ask the router, over UPnP, to forward the streaming ports from the internet.");
         writer.Key("Upnp", config.Upnp);
+        writer.Blank();
+        writer.Note("Add rules to Windows Firewall at every start that let clients reach the ports above,\n" +
+                    "on private and domain networks. false leaves the firewall to you.");
+        writer.Key("Firewall", config.Firewall);
         writer.Blank();
         writer.Note("While the ports above are forwarded, an address outside this network that fails to pair\n" +
                     "this many times is refused for the minutes below, to ban untrusted IP addresses.");

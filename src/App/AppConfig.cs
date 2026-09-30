@@ -71,6 +71,9 @@ internal sealed class AppConfig
     // Ask the router to forward the streaming ports from the internet.
     internal bool Upnp { get; set; }
 
+    // Keep inbound rules for the ports in Windows Firewall, which never asks about a service's child.
+    internal bool Firewall { get; set; } = true;
+
     // Failed pairings an outside address may make before a refusal of BlockMinutes, longer with each
     // refusal in a row, up to a day. Only while Upnp is on; zero attempts turns it off.
     internal int BlockAfterFailures { get; set; } = 5;

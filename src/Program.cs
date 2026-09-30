@@ -531,6 +531,9 @@ internal static class Program
         var forwarding = new PortForwarding(config);
         forwarding.Start();
 
+        // Off this thread: PowerShell takes a second or two, and a client on an open port need not wait.
+        _ = Task.Run(() => FirewallRules.Ensure(config));
+
         // Whether Windows will sign the person in again after a restart, and a notification when
         // it will not. Off this thread: it asks Windows about the account, which takes a moment.
         var statusPage = $"http://localhost{(config.WebPort == 80 ? string.Empty : $":{config.WebPort}")}/";

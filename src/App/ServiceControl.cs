@@ -231,6 +231,8 @@ internal static class ServiceControl
             return 1;
         }
 
+        FirewallRules.Remove();
+
         var manager = Advapi32.OpenSCManager(null, null, Advapi32.SC_MANAGER_CONNECT);
         if (manager == 0)
         {
