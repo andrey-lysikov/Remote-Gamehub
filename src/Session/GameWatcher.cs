@@ -31,6 +31,14 @@ internal sealed class GameWatcher : IDisposable
     // player: a launcher that was open and focused does not change the foreground window.
     private static readonly TimeSpan WindowWaitsAfter = TimeSpan.FromSeconds(8);
 
+    // How long one window must stay in front before it counts as waiting at all: Steam flashes its
+    // own window for a second or two on every launch, and that took the starting card away.
+    private static readonly TimeSpan WindowSettlesAfter = TimeSpan.FromSeconds(3);
+
+    // The window last seen in front and since when, for WindowSettlesAfter.
+    private nint _frontWindow;
+    private readonly Stopwatch _frontFor = new();
+
     // The shell's own windows, which formally cover the screen and are not games. Copied from
     // System-Spinner, where the list was arrived at by finding out.
     private static readonly string[] ShellClasses =
@@ -224,10 +232,17 @@ internal sealed class GameWatcher : IDisposable
     private bool OrdinaryWindowWaiting(TimeSpan sinceLaunch)
     {
         var window = User32.GetForegroundWindow();
+        if (window != _frontWindow)
+        {
+            _frontWindow = window;
+            _frontFor.Restart();
+        }
+
         if (window == 0 || IsShellWindow(window) || User32.IsIconic(window)) return false;
         if (!User32.IsZoomed(window) && TryFullscreenWindow(out _)) return false;
+        if (_frontFor.Elapsed < WindowSettlesAfter) return false;
 
-        // One brought forward by the launch counts at once; one already there only after a while.
+        // One brought forward by the launch counts once settled; one already there only after a while.
         return window != _foregroundAtLaunch || HasStarted || sinceLaunch >= WindowWaitsAfter;
     }
 

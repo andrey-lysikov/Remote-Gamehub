@@ -5,6 +5,7 @@
 * Windows Firewall rules for the streaming ports are added automatically ([Network] Firewall)
 * Moonlight finds the host again: discovery is published through Windows' own mDNS responder
 * The "new version is out" link on the status page is no longer cut off, and "Has new version?" is translated
+* The starting card is shown again for Steam games: Steam's own window flashing up at launch no longer hides it
 
 ## 2.0
 

@@ -102,6 +102,15 @@ jobs:
           if ('${{ steps.check.outputs.rebuild }}' -eq 'true') {
             git tag -f ${{ steps.check.outputs.tag }} ${{ github.sha }}
             git push -f origin ${{ steps.check.outputs.tag }}
+            gh release view ${{ steps.check.outputs.tag }} *> $null
+            if ($LASTEXITCODE -ne 0) {
+              gh release create ${{ steps.check.outputs.tag }} `
+                'build/Remote-Gamehub.msi' `
+                --title '${{ steps.check.outputs.tag }}' `
+                --notes-file release-notes.md `
+                --verify-tag
+              exit $LASTEXITCODE
+            }
             gh release upload ${{ steps.check.outputs.tag }} 'build/Remote-Gamehub.msi' --clobber
             gh release edit ${{ steps.check.outputs.tag }} --notes-file release-notes.md
             exit 0
