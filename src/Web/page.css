@@ -35,9 +35,9 @@ white-space:nowrap;overflow:auto;scrollbar-width:none}
 #host{flex:1;min-width:0;overflow:auto;scrollbar-width:none;white-space:nowrap}
 .titlerow .gh{flex:none}
 #status span.live{color:var(--live)}
-#host a.update{color:var(--live);font-weight:600;text-decoration:none;
+#update a.update{color:var(--live);font-weight:600;text-decoration:none;
 border:1px solid var(--green-line);border-radius:.3rem;padding:.05rem .45rem}
-#host a.update:hover{background:var(--update-hover)}
+#update a.update:hover{background:var(--update-hover)}
 .dot{color:var(--fainter);margin:0 .15rem}
 
 #games{margin-top:.6rem}

@@ -239,15 +239,15 @@ internal sealed class WebConsole : IAsyncDisposable
             return;
         }
 
-        // The header's two lines and which row is running, in one answer rather than three
-        // requests a second: none of the three can contain a newline of its own.
+        // The header's lines and which row is running, in one answer rather than several
+        // requests a second: none of them can contain a newline of its own.
         if (request.Query("status") is not null)
         {
             var runningId = RunningGameId();
             await WriteAsync(stream, 200, "text/html; charset=utf-8",
                 HostLine() + "\n" + Status() + "\n" +
                 (runningId != 0 ? runningId.ToString(CultureInfo.InvariantCulture) : string.Empty) + "\n" +
-                Available());
+                Available() + "\n" + UpdateLink());
             return;
         }
 
@@ -660,6 +660,7 @@ internal sealed class WebConsole : IAsyncDisposable
             ("style", WebAssets.Style),
             ("script", WebAssets.Script),
             ("host", HostLine()),
+            ("update", UpdateLink()),
             ("status", Status()),
 
             // The pairing card is written into every page and hidden, because a client can start
@@ -766,16 +767,15 @@ internal sealed class WebConsole : IAsyncDisposable
 
         if (_config.Upnp) machine.Add("uPnP");
 
-        // A newer release, when the daily check has found one. Last on this line, because it is
-        // news about the server rather than about the machine.
-        if (_updates.Newer is { } newer)
-        {
-            machine.Add($"<a class=update href=\"{Escape(_updates.Link)}\" target=_blank " +
-                        "rel=noopener>" + Text.T("version {0} is out — download", Escape(newer)) + "</a>");
-        }
-
         return string.Join(" <span class=dot>·</span> ", machine);
     }
+
+    // The header's update slot: the download link once a check has found a newer release, else
+    // the button that checks now. Kept off the host line, which scrolls and would clip it.
+    private string UpdateLink() => _updates.Newer is { } newer
+        ? $"<a class=update href=\"{Escape(_updates.Link)}\" target=_blank rel=noopener>" +
+          Text.T("version {0} is out — download", Escape(newer)) + "</a>"
+        : "<a href=\"#\" id=checkversion>" + Text.T("Has new version?") + "</a>";
 
     // The end of the log file, read while the server is still writing to it — hence the sharing
     // flags. Cut at the first line break, so the page never opens on half a line.

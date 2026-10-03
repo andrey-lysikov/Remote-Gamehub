@@ -60,6 +60,7 @@ internal static class TextRu
         ["Forget {0}? It will have to pair again."] = "Забыть {0}? Устройству придётся снова выполнить сопряжение.",
         ["Forgotten."] = "Забыто.",
         ["From this folder"] = "Рабочая папка",
+        ["Has new version?"] = "Есть новая версия?",
         ["High"] = "Высокое",
         ["It could not be fetched: {0}"] = "Не удалось скачать: {0}",
         ["last seen {0} · paired {1}"] = "был в сети {0} · сопряжено {1}",

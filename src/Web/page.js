@@ -34,6 +34,7 @@ const both=(await (await fetch('/?status=1')).text()).split('\n');
 $('host').innerHTML=both[0];$('status').innerHTML=both[1]||'';
 document.querySelectorAll('#games .game').forEach(el=>el.classList.toggle('running',el.dataset.id===(both[2]||'')));
 available(both[3]||'');
+if(!update.dataset.busy&&both[4]&&both[4]!==update.dataset.last){update.innerHTML=both[4];update.dataset.last=both[4];}
 const theme=(await (await fetch('/?theme=1')).text()).trim();
 if(theme&&document.documentElement.dataset.theme!==theme)document.documentElement.dataset.theme=theme;
 },1000);
@@ -122,13 +123,14 @@ const tools=document.querySelectorAll('#hosttools button');tools.forEach(b=>b.di
 setTimeout(()=>tools.forEach(b=>b.disabled=false),15000);
 try{scansaid.textContent=await (await fetch('/?power='+power,{method:'POST'})).text();}
 catch{scansaid.textContent='[[The host did not answer.]]';}});
-const checkversion=$('checkversion');
-checkversion.addEventListener('click',async e=>{e.preventDefault();
-if(checkversion.dataset.busy)return;checkversion.dataset.busy='1';
-checkversion.textContent='[[Checking…]]';
-try{checkversion.textContent=await (await fetch('/?checkupdate=1')).text();}
-catch{checkversion.textContent='[[Check failed]]';}
-setTimeout(()=>{checkversion.textContent='Has new version?';delete checkversion.dataset.busy;},5000);});
+const update=$('update');
+update.addEventListener('click',async e=>{const link=e.target.closest('#checkversion');if(!link)return;e.preventDefault();
+if(link.dataset.busy)return;link.dataset.busy=update.dataset.busy='1';
+link.textContent='[[Checking…]]';
+try{link.textContent=await (await fetch('/?checkupdate=1')).text();}
+catch{link.textContent='[[Check failed]]';}
+delete update.dataset.busy;
+setTimeout(()=>{link.textContent='[[Has new version?]]';delete link.dataset.busy;},5000);});
 function open(id,name,starts,from,pointerOn,level,cardOn,extra,noStream){editing=id;
 $('editortitle').textContent=id?'[[Edit game]]':'[[Add a game]]';
 title.value=name||'';command.value=starts||'';folder.value=from||'';args.value=extra||'';
