@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1
+
+* Windows Firewall rules for the streaming ports are added automatically ([Network] Firewall)
+* Moonlight finds the host again: discovery is published through Windows' own mDNS responder
+
 ## 2.0
 
 * Allow programs without a stream (for example llama-server)
