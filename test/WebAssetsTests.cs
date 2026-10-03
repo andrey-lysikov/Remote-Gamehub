@@ -13,7 +13,7 @@ public class WebAssetsTests
     // Every slot the whole page asks for, and the only ones WebConsole.Page() knows how to fill.
     private static readonly string[] PageSlots =
     {
-        "lang", "theme", "name", "version", "project", "style", "script", "host", "status",
+        "lang", "theme", "name", "version", "project", "style", "script", "host", "update", "status",
         "pairclass", "who", "autologon", "games", "clients", "blocked", "available", "pointer", "log",
     };
 
