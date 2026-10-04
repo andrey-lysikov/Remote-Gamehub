@@ -273,7 +273,9 @@ internal sealed unsafe class NvencEncoder : IVideoEncoder
                  (_yuv444 ? "4:4:4 colour, " : string.Empty) +
                  $"{_quality.ToString().ToLowerInvariant()} quality, ultra-low-latency, " +
                  $"adaptive quantisation at {settings.AqStrength}, " +
-                 $"quantiser capped at {settings.MaxQp}");
+                 $"quantiser capped at {settings.MaxQp}; the stream says it is " +
+                 (_hdr ? $"BT.2020 PQ, {(_fullRange ? "full" : "limited")} range"
+                       : "BT.709 colours with the BT.601 matrix, limited range"));
     }
 
     private void ReadSequenceHeader()
