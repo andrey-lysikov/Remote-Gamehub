@@ -71,7 +71,7 @@ public class HostProgramTests
     {
         var finished = new ManualResetEventSlim();
 
-        var target = new LaunchTarget(System32("ping.exe"), null, "ping", false, default, default,
+        var target = new LaunchTarget(System32("ping.exe"), null, "ping", default, default,
                                       Arguments: "-n 30 127.0.0.1", NoStream: true);
 
         var pingsBefore = Pings();
@@ -103,7 +103,7 @@ public class HostProgramTests
         var script = folder.File("hello.cmd", "@echo hello from a script\r\n@echo to stderr 1>&2\r\n");
         var finished = new ManualResetEventSlim();
 
-        var target = new LaunchTarget(script, null, "hello", false, default, default, NoStream: true);
+        var target = new LaunchTarget(script, null, "hello", default, default, NoStream: true);
 
         using var program = HostProgram.Start(2, 43, target, _ => finished.Set());
         Assert.NotNull(program);

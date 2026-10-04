@@ -14,7 +14,7 @@ public class WebAssetsTests
     private static readonly string[] PageSlots =
     {
         "lang", "theme", "name", "version", "project", "style", "script", "host", "update", "status",
-        "pairclass", "who", "autologon", "games", "clients", "blocked", "available", "pointer", "log",
+        "pairclass", "who", "autologon", "games", "clients", "blocked", "available", "log",
     };
 
     [Fact]
@@ -46,9 +46,6 @@ public class WebAssetsTests
     {
         Assert.Contains("id=autologon", WebAssets.Part("autologon"));
         Assert.Equal(new[] { "account" }, WebAssets.SlotsIn(WebAssets.Part("autologon")));
-
-        Assert.Contains("id=pointer", WebAssets.Part("pointer"));
-        Assert.Empty(WebAssets.SlotsIn(WebAssets.Part("pointer")));
     }
 
     [Fact]

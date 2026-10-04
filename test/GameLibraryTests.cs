@@ -109,7 +109,7 @@ public class GameLibraryTests
         folder.File(@"games\Alpha\alpha.exe");
         library.Rescan(FoldersOnly(games));
 
-        // What the editor sends when only the quality or the pointer was changed.
+        // What the editor sends when only the quality or the starting card was changed.
         var row = library.Details().Single();
         library.Save(row.Id, row.Title, row.LaunchCommand, row.InstallPath);
 
