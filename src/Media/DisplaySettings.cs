@@ -334,9 +334,10 @@ internal sealed class DisplayAdaptation : IDisposable
         var target = wantHdr && canEncodeHdr;
         if (target == enabled) return null;
 
-        if (!DisplayControl.SetColourState(path.Value, target))
+        if (!SetHdrPatiently(path.Value, target))
         {
-            Log.Warn($"HDR could not be turned {(target ? "on" : "off")} on {deviceName}");
+            Log.Warn($"HDR could not be turned {(target ? "on" : "off")} on {deviceName} " +
+                     $"in {ModeAttempts} tries; the screen stays as it was");
             return null;
         }
 
@@ -346,6 +347,30 @@ internal sealed class DisplayAdaptation : IDisposable
               "sent washed out otherwise; the screen is put back as it was afterwards");
 
         return enabled;
+    }
+
+    // Like SetPatiently, for HDR. A refusal is read back before it is believed: just after a
+    // console handover the call fails and the change still lands a moment later.
+    private static bool SetHdrPatiently(in DisplayControl.PathInfo path, bool on)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            if (DisplayControl.SetColourState(path, on) || HdrIs(path, on))
+            {
+                if (attempt > 1) Log.Info($"HDR went {(on ? "on" : "off")} on try {attempt}");
+                return true;
+            }
+
+            if (attempt >= ModeAttempts) return HdrIs(path, on);
+
+            Thread.Sleep(ModeRetryDelayMs);
+        }
+    }
+
+    private static bool HdrIs(in DisplayControl.PathInfo path, bool on)
+    {
+        var info = DisplayControl.ColourInfo(path);
+        return info is not null && ((info.Value.Value & DisplayControl.AdvancedColorEnabled) != 0) == on;
     }
 
     // Turns HDR off after the capture has said it cannot do ten bits. Returns whether anything
@@ -510,8 +535,11 @@ internal sealed class DisplayAdaptation : IDisposable
             {
                 var step = Stopwatch.StartNew();
                 var path = FindPath(_deviceName);
-                if (path is not null) DisplayControl.SetColourState(path.Value, hdr);
-                Log.Info($"HDR restored in {step.ElapsedMilliseconds} ms");
+                if (path is not null && SetHdrPatiently(path.Value, hdr))
+                    Log.Info($"HDR restored in {step.ElapsedMilliseconds} ms");
+                else
+                    Log.Warn($"HDR could not be put back {(hdr ? "on" : "off")}; switch it in " +
+                             "Settings > Display");
             }
 
             if (_previousScale is { } scale)
