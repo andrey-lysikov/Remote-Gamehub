@@ -343,8 +343,8 @@ internal sealed class DisplayAdaptation : IDisposable
 
         Log.Event(target
             ? "HDR was turned on for this stream"
-            : "HDR was on and has been turned off for this stream, because the picture would be " +
-              "sent washed out otherwise; the screen is put back as it was afterwards");
+            : "HDR was on and has been turned off for this stream; the screen is put back as it " +
+              "was afterwards");
 
         return enabled;
     }

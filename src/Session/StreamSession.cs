@@ -24,7 +24,9 @@ internal sealed record LaunchRequest(int AppId, byte[] RiKey, uint RiKeyId, int 
 internal sealed class SessionManager : IDisposable
 {
     private readonly AppConfig _config;
-    private readonly DisplayOutput _output;
+    // The screen streamed, as last found. Not readonly: a server started under remote desktop knew
+    // only the remote display, which the console handover replaces with the real one.
+    private DisplayOutput _output;
     private readonly EncoderCapabilities _encoder;
     private readonly GameLibrary _games;
     private readonly GamepadHub _gamepads;
@@ -333,7 +335,7 @@ internal sealed class SessionManager : IDisposable
         // Before the game, not after: a game reads the default playback device when it starts, and
         // one started on the old device would keep it for as long as it runs.
         MoveTheSound(request.AudioChannels);
-        AdaptTheScreen(request, taken ?? _output);
+        AdaptTheScreen(request, taken ?? CurrentScreen());
 
         if (request.AppId != AppParameters.Protocol.DesktopAppId && !StartApplication(request.AppId))
         {
@@ -524,6 +526,16 @@ internal sealed class SessionManager : IDisposable
         }
     }
 
+    // The screen as it is now, remembered for next time; the last one known when none is found.
+    // One look, not a wait: this is the ordinary launch, with the console already here.
+    private DisplayOutput CurrentScreen()
+    {
+        var screen = DisplayInventory.Select(DisplayInventory.Enumerate(), _config.Output,
+                                             _config.VirtualDisplay, out _);
+        if (screen is not null) _output = screen;
+        return _output;
+    }
+
     // Waits for the card to light an output after the console was taken back, and answers with it.
     // Here at the launch, which a client allows the time to start a game, not at the strict ANNOUNCE.
     private DisplayOutput? WaitForScreen()
@@ -538,6 +550,7 @@ internal sealed class SessionManager : IDisposable
             {
                 Log.Info($"the console is back and its screen is up: {screen.Label} " +
                          $"\"{screen.DeviceName}\" ({reason})");
+                _output = screen;
                 return screen;
             }
 
@@ -577,9 +590,10 @@ internal sealed class SessionManager : IDisposable
                     output.OutputIndex != _output.OutputIndex)
                 {
                     Log.Info($"the screen to capture is now {output.Label} \"{output.DeviceName}\", " +
-                             $"not {_output.Label} as it was at startup ({reason})");
+                             $"not {_output.Label} as it was before ({reason})");
                 }
 
+                _output = output;
                 return output;
             }
 
@@ -647,7 +661,7 @@ internal sealed class SessionManager : IDisposable
         var taken = _sessionWatch.IsRemote && _sessionWatch.ReclaimConsole() ? WaitForScreen() : null;
 
         MoveTheSound(request.AudioChannels);
-        AdaptTheScreen(request, taken ?? _output);
+        AdaptTheScreen(request, taken ?? CurrentScreen());
 
         Log.Info("resume accepted; waiting for the client to negotiate the stream");
         return true;
@@ -789,7 +803,8 @@ internal sealed class SessionManager : IDisposable
         if (request.Width <= 0 || request.Height <= 0 || request.Fps <= 0) return;
 
         var desktop = request.AppId == AppParameters.Protocol.DesktopAppId;
-        var wantHdr = request.HdrRequested && _encoder.AnyHdr;
+        // Never for the desktop: in HDR Windows draws its windows dim and grey. See DescribeHdr.
+        var wantHdr = !desktop && request.HdrRequested && _encoder.AnyHdr;
 
         var adaptation = DisplayAdaptation.Apply(screen, request.Width, request.Height, request.Fps,
             wantHdr, _encoder.AnyHdr, scaleForClient: desktop, _scales, isGame: !desktop);
@@ -1010,6 +1025,9 @@ internal sealed class StreamSession : IDisposable
     {
         if (sending) return "high dynamic range, as the client asked";
         if (!_negotiation.HdrRequested) return "standard range, which is what the client asked for";
+        if (AppId == AppParameters.Protocol.DesktopAppId)
+            return "standard range for the desktop, although the client asked for HDR — Windows " +
+                   "draws its windows dim and grey in HDR; games started from the client get it";
 
         var why =
             _negotiation.Codec == VideoCodec.Hevc
@@ -1307,9 +1325,10 @@ internal sealed class StreamSession : IDisposable
                 return;
             }
 
-            // HDR only when the client asked and the card/codec (HEVC or AV1) can send ten bits;
-            // whether the screen really is in HDR is for the capture below to answer.
-            var hdr = _negotiation.HdrRequested &&
+            // HDR only for a game, when the client asked and the card/codec (HEVC or AV1) can send
+            // ten bits; whether the screen really is in HDR is for the capture below to answer.
+            var desktop = AppId == AppParameters.Protocol.DesktopAppId;
+            var hdr = _negotiation.HdrRequested && !desktop &&
                       ((_negotiation.Codec == VideoCodec.Hevc && _capabilities.Hdr) ||
                        (_negotiation.Codec == VideoCodec.Av1 && _capabilities.Av1Hdr));
 
@@ -1320,7 +1339,6 @@ internal sealed class StreamSession : IDisposable
 
             // Before any capture: the screen is moved as close to the request as it goes, so its
             // size and rectangle are read afterwards. Scaling is for a desktop stream only.
-            var desktop = AppId == AppParameters.Protocol.DesktopAppId;
 
             // Already done at /launch, before this game read the screen, when the client sent
             // mode/hdrMode there; otherwise done here, same as it always was.
