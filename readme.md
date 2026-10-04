@@ -1,13 +1,13 @@
-<img src="pictures/RemoteGameHub.ico" width="128" alt="icon">
+<img src="pictures/Remote-Gamehub.ico" width="128" alt="icon">
 
-# Remote Game Hub
+# Remote-Gamehub
 
 A server speaks the NVIDIA Shield protocol (GameStream) and streams a Windows game host to its clients. Fully compatible with the stock
 [Moonlight clients](https://app.lizardbyte.dev/Sunshine/#Clients).
 
-[![Downloads](https://img.shields.io/github/downloads/andrey-lysikov/remote-gamehub/total)](https://github.com/andrey-lysikov/remote-gamehub/releases/latest)
-[![Release](https://img.shields.io/github/v/release/andrey-lysikov/remote-gamehub)](https://github.com/andrey-lysikov/remote-gamehub/releases/latest)
-[![Platform](https://img.shields.io/badge/platform-Windows%2011%20x64-blue)](https://github.com/andrey-lysikov/remote-gamehub/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/andrey-lysikov/Remote-Gamehub/total)](https://github.com/andrey-lysikov/Remote-Gamehub/releases/latest)
+[![Release](https://img.shields.io/github/v/release/andrey-lysikov/Remote-Gamehub)](https://github.com/andrey-lysikov/Remote-Gamehub/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows%2011%20x64-blue)](https://github.com/andrey-lysikov/Remote-Gamehub/releases/latest)
 
 ## Features
 

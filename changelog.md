@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2
+
+* Imrove support PlayStation controllers
+* The mouse pointer now by Assembly tools
+* HDR/SDR by shaders, Smoother gradients. The colour conversion dithers instead of leaving steps
+
 ## 2.1
 
 * Windows Firewall rules for the streaming ports are added automatically ([Network] Firewall)
