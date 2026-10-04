@@ -218,8 +218,8 @@ internal static class Program
                 // checks above, because it needs the same screen and settings the stream would use.
                 if (args.Any(a => a.Equals("--capture-test", StringComparison.OrdinalIgnoreCase)))
                 {
-                    return CaptureSelfTest.Run(preflight.Output!, preflight.Config!.CaptureCursor,
-                                               Path.GetDirectoryName(preflight.Config.Path)!);
+                    return CaptureSelfTest.Run(preflight.Output!,
+                                               Path.GetDirectoryName(preflight.Config!.Path)!);
                 }
 
                 return Serve(preflight);
@@ -393,6 +393,8 @@ internal static class Program
         // leaves Windows keeping that stream's scale, and only this puts the person's own back.
         var scales = new ScaleStore(database);
         DisplayAdaptation.RestoreLeftoverScales(scales);
+        var mouseKeys = new MouseKeys(database);
+        mouseKeys.RestoreLeftover();
         var clients = new ClientStore(database);
 
         // Only here, at startup. A client removed while it is using the stream would lose it for a
@@ -427,7 +429,7 @@ internal static class Program
         var journal = new ConnectionJournal();
 
         using var sessions = new SessionManager(config, preflight.Output!, encoder, games,
-                                                gamepads, tray, session, scales, journal);
+                                                gamepads, tray, session, scales, mouseKeys, journal);
 
         // Stops outside addresses hammering forwarded ports; refuses nobody unless Upnp is on, and
         // keeps its counts in the database so a restarted worker hands out no clean slate.

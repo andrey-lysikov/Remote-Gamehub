@@ -131,12 +131,11 @@ try{link.textContent=await (await fetch('/?checkupdate=1')).text();}
 catch{link.textContent='[[Check failed]]';}
 delete update.dataset.busy;
 setTimeout(()=>{link.textContent='[[Has new version?]]';delete link.dataset.busy;},5000);});
-function open(id,name,starts,from,pointerOn,level,cardOn,extra,noStream){editing=id;
+function open(id,name,starts,from,level,cardOn,extra,noStream){editing=id;
 $('editortitle').textContent=id?'[[Edit game]]':'[[Add a game]]';
 title.value=name||'';command.value=starts||'';folder.value=from||'';args.value=extra||'';
 nostream.checked=noStream==='1';showKind();
 quality.value=level===undefined?2:level;
-if(window.pointer)pointer.checked=pointerOn==='1';
 (document.querySelector('#splash input[value="'+cardOn+'"]')||document.querySelector('#splash input[value="1"]')).checked=true;
 editorsaid.textContent='';
 arturl.value='';pending=null;tab('main');showStored();
@@ -145,7 +144,7 @@ $('cancel').addEventListener('click',()=>editor.close());
 $('save').addEventListener('click',async()=>{
 if(!title.value.trim()||!command.value.trim()){
 editorsaid.textContent='[[A game needs a name and something to start.]]';return;}
-const r=await fetch('/?save='+editing+'&title='+encodeURIComponent(title.value)+'&command='+encodeURIComponent(command.value)+'&folder='+encodeURIComponent(folder.value)+'&args='+encodeURIComponent(args.value)+'&nostream='+(nostream.checked?1:0)+'&pointer='+(window.pointer&&pointer.checked?1:0)+'&quality='+quality.value+'&card='+document.querySelector('#splash input:checked').value);
+const r=await fetch('/?save='+editing+'&title='+encodeURIComponent(title.value)+'&command='+encodeURIComponent(command.value)+'&folder='+encodeURIComponent(folder.value)+'&args='+encodeURIComponent(args.value)+'&nostream='+(nostream.checked?1:0)+'&quality='+quality.value+'&card='+document.querySelector('#splash input:checked').value);
 const [said,id]=(await r.text()).split('\n');editorsaid.textContent=said;
 if(!id)return;
 if(pending){editorsaid.textContent=await sendCover(id,pending);pending=null;}
@@ -191,7 +190,7 @@ if(e.target.closest('#addtile')){open(0);return;}
 const button=e.target.closest('button[data-do]');if(!button)return;
 const tile=button.closest('.game');
 if(button.dataset.do==='edit'){open(tile.dataset.id,tile.dataset.title,tile.dataset.command,
-tile.dataset.folder,tile.dataset.pointer,tile.dataset.quality,tile.dataset.card,tile.dataset.args,
+tile.dataset.folder,tile.dataset.quality,tile.dataset.card,tile.dataset.args,
 tile.dataset.nostream);return;}
 if(button.dataset.do==='start'){button.disabled=true;
 scansaid.textContent=await (await fetch('/?start='+tile.dataset.id)).text();

@@ -80,49 +80,6 @@ internal static class User32
     [DllImport("user32.dll", EntryPoint = "MapVirtualKeyW")]
     internal static extern uint MapVirtualKey(uint code, uint mapType);
 
-    // The shape a window asks for, for the case where Windows is keeping none: a class's cursor is
-    // what it would set the moment a pointer entered it.
-    internal const int GCLP_HCURSOR = -12;
-
-    // The resting arrow, by the numeric identifier winuser.h gives it.
-    internal static readonly nint IDC_ARROW = 32512;
-
-    [DllImport("user32.dll")]
-    internal static extern nint WindowFromPoint(Point point);
-
-    [DllImport("user32.dll", EntryPoint = "GetClassLongPtrW")]
-    internal static extern nuint GetClassLongPtr(nint window, int index);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "LoadCursorW")]
-    internal static extern nint LoadCursor(nint instance, nint name);
-
-    // Asking a window what part of itself is under a point. The border shapes are its answer to
-    // this and are nowhere in its class, which is why a class cursor is an arrow on a resize edge.
-    internal const uint WM_NCHITTEST = 0x0084;
-
-    internal const int HTLEFT = 10;
-    internal const int HTRIGHT = 11;
-    internal const int HTTOP = 12;
-    internal const int HTTOPLEFT = 13;
-    internal const int HTTOPRIGHT = 14;
-    internal const int HTBOTTOM = 15;
-    internal const int HTBOTTOMLEFT = 16;
-    internal const int HTBOTTOMRIGHT = 17;
-
-    internal static readonly nint IDC_SIZENWSE = 32642;
-    internal static readonly nint IDC_SIZENESW = 32643;
-    internal static readonly nint IDC_SIZEWE = 32644;
-    internal static readonly nint IDC_SIZENS = 32645;
-
-    // Abandon the question if the window is not answering: a hung application must not take the
-    // stream's pointer with it.
-    internal const uint SMTO_ABORTIFHUNG = 0x0002;
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageTimeoutW")]
-    internal static extern nint SendMessageTimeout(nint window, uint message, nint wParam,
-                                                   nint lParam, uint flags, uint timeoutMs,
-                                                   out nint result);
-
     // The wheel is counted in notches (WHEEL_DELTA), which is the unit the protocol also uses.
 
     // Non-zero when this process runs inside a remote desktop session rather than on the console.
@@ -181,6 +138,32 @@ internal static class User32
     internal static extern bool SystemParametersInfo(uint action, uint param, out int value,
                                                      uint update);
 
+    // MOUSEKEYS (winuser.h): the keypad as a mouse. Switched on, it also makes Windows count a
+    // pointing device present, which is what draws the pointer on a machine with no mouse.
+    internal const uint SPI_GETMOUSEKEYS = 0x0036;
+    internal const uint SPI_SETMOUSEKEYS = 0x0037;
+    internal const uint MKF_MOUSEKEYSON = 0x0001;
+    internal const uint MKF_AVAILABLE = 0x0002;
+    internal const uint MKF_INDICATOR = 0x0020;
+    internal const uint MKF_REPLACENUMBERS = 0x0080;
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct MouseKeysInfo
+    {
+        internal uint Size;
+        internal uint Flags;
+        internal uint MaxSpeed;
+        internal uint TimeToMaxSpeed;
+        internal uint CtrlSpeed;
+        internal uint Reserved1;
+        internal uint Reserved2;
+    }
+
+    [DllImport("user32.dll", SetLastError = true, EntryPoint = "SystemParametersInfoW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SystemParametersInfo(uint action, uint param,
+                                                     ref MouseKeysInfo value, uint update);
+
     // ------------------------------------------------------------------ windows and screens
 
     // The monitor nearest a window, the only sensible answer for a game.
@@ -224,13 +207,6 @@ internal static class User32
     [DllImport("user32.dll")]
     internal static extern uint GetWindowThreadProcessId(nint window, out uint processId);
 
-    // The pointer is on screen. Absent while a game has hidden it.
-    internal const int CURSOR_SHOWING = 0x00000001;
-
-    // Windows is suppressing the pointer because the user is working by touch. The handle is still
-    // valid, and drawing it would put a pointer on the client's screen that is not on this one.
-    internal const int CURSOR_SUPPRESSED = 0x00000002;
-
     internal const int DI_NORMAL = 0x0003;
 
     [DllImport("user32.dll", SetLastError = true)]
@@ -242,10 +218,6 @@ internal static class User32
     internal static extern bool DrawIconEx(nint dc, int x, int y, nint icon,
                                            int width, int height, uint step,
                                            nint brush, int flags);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    internal static extern bool GetIconInfo(nint icon, out IconInfo info);
 
     [DllImport("gdi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

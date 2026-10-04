@@ -325,6 +325,24 @@ internal sealed class Database : IDisposable
             version = 16;
         }
 
+        if (version < 17)
+        {
+            // The per-game pointer switch is gone: MouseKeys lets Windows decide, as with a mouse.
+            // mouse_keys: the flags a stream replaced; a row still here at a start is a restore owed.
+            Execute(_connection,
+                """
+                BEGIN;
+                ALTER TABLE games DROP COLUMN pointer;
+                CREATE TABLE mouse_keys (
+                    flags INTEGER NOT NULL
+                );
+                PRAGMA user_version = 17;
+                COMMIT;
+                """);
+
+            version = 17;
+        }
+
         Log.Info(from == version
             ? $"database {Path}, schema version {version}"
             : $"database {Path}, schema migrated from version {from} to {version}");

@@ -50,15 +50,14 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
 
     private readonly int _adapterIndex;
     private readonly int _outputIndex;
-    private readonly bool _captureCursor;
     private readonly bool _preferHdr;
-    private readonly CursorPainter? _cursor;
+
+    // The size it draws inside is told to it when the duplication opens, which is where the
+    // frame's own size becomes known; a mode change opens it again with the new one.
+    private readonly CursorPainter _cursor = new();
 
     // What the duplication last said about the pointer. See TryCapture.
     private bool _pointerVisible;
-
-    // Where the captured screen sits on the desktop. See OpenDuplication.
-    private Rect _bounds;
 
     // How many frames the desktop composed since the last capture, as the duplication counts them.
     // More than one means this end asked too slowly and DXGI coalesced what it missed.
@@ -112,9 +111,6 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
     // numbers when the screen answers nothing, which is every screen that does no HDR.
     internal HdrDisplay Hdr { get; private set; } = HdrDisplay.Rec2020;
 
-    // Leaves the pointer out of the frames for now.
-    internal bool PointerSuppressed { get; set; }
-
     // What the encoder reads: raw capture for HDR (shader adds the pointer), else the copy with it.
     internal nint FrameTexture => !IsHdrDesktop && _pointerDrawn ? (nint)_composed : (nint)_frame;
 
@@ -127,24 +123,18 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
 
     internal nint Context => (nint)_context;
 
-    private DesktopDuplicator(DisplayOutput output, bool captureCursor, bool preferHdr)
+    private DesktopDuplicator(DisplayOutput output, bool preferHdr)
     {
         _adapterIndex = output.AdapterIndex;
         _outputIndex = output.OutputIndex;
-        _captureCursor = captureCursor;
         _preferHdr = preferHdr;
-
-        // The size it draws inside is told to it when the duplication opens, which is where the
-        // frame's own size becomes known; a mode change opens it again with the new one.
-        _cursor = captureCursor ? new CursorPainter() : null;
     }
 
     // preferHdr asks for the desktop as it really is when the screen is in high dynamic range,
     // rather than the eight-bit conversion DXGI would otherwise hand back.
-    internal static DesktopDuplicator Create(DisplayOutput output, bool captureCursor,
-                                             bool preferHdr = false)
+    internal static DesktopDuplicator Create(DisplayOutput output, bool preferHdr = false)
     {
-        var duplicator = new DesktopDuplicator(output, captureCursor, preferHdr);
+        var duplicator = new DesktopDuplicator(output, preferHdr);
         try
         {
             duplicator.OpenDevice();
@@ -198,10 +188,6 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
             // Only asked for when high dynamic range is wanted, and only used if the newer
             // interface is there; the older path below is the one that has been proven.
             if (_preferHdr) Com.QueryInterface(output, Dxgi.IID_IDXGIOutput5, out output5);
-
-            // Where this screen sits now, not when it was enumerated: a mode change moves them
-            // all, and Windows answers about the pointer in the whole desktop's coordinates.
-            _bounds = Dxgi.GetOutputDesc(output).DesktopCoordinates;
 
             if (Dxgi.GetOutputDesc1(output, out var colour)) Hdr = HdrDisplay.From(colour);
         }
@@ -269,15 +255,14 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
 
         // The pointer's position arrives in the frame's own coordinates, so the painter needs the
         // size the frame is now: a mode change is exactly what moves the edge it is clipped to.
-        _cursor?.FrameIs(Width, Height, _bounds);
+        _cursor.FrameIs(Width, Height);
 
         // What the last duplication said about the pointer being shown was said of another desktop
         // or another mode; this one says so itself, on its first frame that carries a mouse update.
         _pointerVisible = false;
 
-        // Off only when there is nothing to draw the pointer with; see CreateFrameTexture for
-        // where GDI writes it either way.
-        _drawPointer = _cursor is not null;
+        // Off only when the texture turns out to be one GDI cannot draw into; see CreateFrameTexture.
+        _drawPointer = true;
         RefreshRate = desc.ModeDesc.RefreshDenominator == 0
             ? 0
             : (double)desc.ModeDesc.RefreshNumerator / desc.ModeDesc.RefreshDenominator;
@@ -302,7 +287,7 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
         Log.Info($"desktop duplication opened: {Width}x{Height}, {rate}" +
                  (IsHdrDesktop ? ", high dynamic range" : string.Empty) +
                  (_drawPointer ? ", pointer drawn into the frame" : ", pointer not drawn") +
-                 (_captureCursor && !_drawPointer ? " (it could not be)" : string.Empty));
+                 (!_drawPointer ? " (it could not be)" : string.Empty));
     }
 
     private void CreateFrameTexture()
@@ -386,16 +371,9 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
 
         if (!_drawPointer || _frame is null) return false;
 
-        // Held back for now, as SplashMode.Auto does until a window waits in front.
-        if (PointerSuppressed)
-        {
-            if (IsHdrDesktop && wasDrawn) ClearCursorOverlay();
-            return wasDrawn;
-        }
-
         // Asked before the copy, not after: inside a game there is no pointer at all, and copying
         // a whole frame to change nothing is half a gigabyte a second at 1080p60.
-        if (!_cursor!.Wanted(_pointerVisible, out var shape, out var x, out var y))
+        if (!_cursor.Wanted(_pointerVisible, out var shape, out var x, out var y))
         {
             // The HDR overlay is sampled every frame regardless, so a pointer that is gone must
             // be cleared out of it or it goes on showing up in every frame after.
@@ -480,7 +458,7 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
 
         // Where the pointer is and whether it is shown, according to the duplication itself; the
         // fields are filled in only when they changed, which a non-zero LastMouseUpdateTime says.
-        if (info.LastMouseUpdateTime != 0 && _cursor is not null)
+        if (info.LastMouseUpdateTime != 0)
         {
             _pointerVisible = info.PointerPosition.Visible != 0;
             _cursor.PositionedAt(info.PointerPosition.Position.X, info.PointerPosition.Position.Y);
@@ -488,7 +466,7 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
 
         // The shape, handed over only when it has changed. It comes with the frame, so it is taken
         // whether or not the desktop moved: a pointer that changed over a still desktop is common.
-        if (info.PointerShapeBufferSize > 0 && _cursor is not null) ReadPointerShape(info);
+        if (info.PointerShapeBufferSize > 0) ReadPointerShape(info);
 
         LastAccumulatedFrames = info.AccumulatedFrames;
 
@@ -556,7 +534,7 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
             return;
         }
 
-        _cursor!.ShapeIs(shape, _shapeBuffer, (int)written);
+        _cursor.ShapeIs(shape, _shapeBuffer, (int)written);
     }
 
     // Given back as soon as it is copied and in any case before the next is asked for: holding two
@@ -657,7 +635,7 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
         _disposed = true;
 
         ReleaseHeldFrame();
-        _cursor?.Dispose();
+        _cursor.Dispose();
 
         Com.ReleaseAndClear(ref _duplication);
         Com.ReleaseAndClear(ref _output1);

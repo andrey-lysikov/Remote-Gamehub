@@ -16,8 +16,8 @@ internal enum VideoCodec
     Av1,
 }
 
-// When the starting card covers a game's start, per game. Auto also draws the pointer while a
-// launcher's window waits in front. Stored as the number: 1, the column's default, is Auto.
+// When the starting card covers a game's start, per game. Auto takes it away while a launcher's
+// window waits in front. Stored as the number: 1, the column's default, is Auto.
 internal enum SplashMode
 {
     Never = 0,
@@ -82,10 +82,6 @@ internal sealed class AppConfig
     // [Display]. The codec, the frame rate and the bitrate have no setting of their own: they are
     // the client's to choose, and every ceiling here was caught halving one silently.
     internal string Output { get; set; } = "auto";
-
-    // Only the capture self-test reads this — not [Display]: a stream decides its own pointer for
-    // itself, always for the desktop and for a game only when that game's own switch asks for one.
-    internal bool CaptureCursor { get; set; } = true;
 
     // [Games]
     internal bool Steam { get; set; } = true;

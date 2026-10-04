@@ -16,9 +16,9 @@ internal static unsafe class CaptureSelfTest
 
     private const int SliceMs = 100;
 
-    internal static int Run(DisplayOutput output, bool captureCursor, string directory)
+    internal static int Run(DisplayOutput output, string directory)
     {
-        using var duplicator = DesktopDuplicator.Create(output, captureCursor);
+        using var duplicator = DesktopDuplicator.Create(output);
 
         var deadline = Environment.TickCount64 + TotalWaitMs;
         while (Environment.TickCount64 < deadline)

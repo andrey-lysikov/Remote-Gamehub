@@ -36,8 +36,7 @@
 </div></div>
 </div>
 <div class=tab id=tab-stream hidden>
-{{pointer}}
-<div class=choice>[[Splash screen when game is starting]] <span class=hint>[[Auto hides it and shows the mouse while a launcher waits for you]]</span>
+<div class=choice>[[Splash screen when game is starting]] <span class=hint>[[Auto hides it while a launcher waits for you]]</span>
 <div class=segments id=splash><label><input type=radio name=splash value=1 checked><span>[[Auto]]</span></label><label><input type=radio name=splash value=2><span>[[Always]]</span></label><label><input type=radio name=splash value=0><span>[[Never]]</span></label></div></div>
 
 <label>[[Quality]] <span class=hint>[[lower for fast games, higher for quiet ones — a remote client drops one level]]</span><select id=quality><option value=0>[[Low]]</option><option value=1>[[Medium]]</option><option value=2>[[High]]</option><option value=3>[[Lossless]]</option></select></label>
@@ -73,6 +72,3 @@
 <p>[[Windows can sign <b>{{account}}</b> in automatically. The password is typed into Windows' own settings window and kept by Windows; this server never sees it. Understand what that means first: anybody who switches the machine on lands on that desktop without a password, and a BitLocker drive with no start-up PIN unlocks on its own with it. Locking the screen right after sign-in keeps the machine shut while this host stays reachable: the lock screen is streamed and unlocked from the client.]]</p>
 <div class=row><button id=alopen class=primary>[[Open Windows sign-in settings]]</button><span id=alsaid class=q></span></div>
 </section>
-
-<!--part:pointer-->
-<label class=switch><input type=checkbox id=pointer><span>[[Enable software mouse cursor]]</span></label>

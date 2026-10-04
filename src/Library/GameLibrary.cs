@@ -27,7 +27,7 @@ internal sealed record ArtworkCandidate(long Id, string Source, string? External
 
 // Everything needed to start one game and to recognise it afterwards.
 internal sealed record LaunchTarget(string Command, string? InstallPath, string Title,
-                                    bool Pointer, StreamQuality Quality, SplashMode Splash,
+                                    StreamQuality Quality, SplashMode Splash,
                                     string? WorkingDirectory = null, string? Arguments = null,
                                     bool NoStream = false)
 {
@@ -637,7 +637,7 @@ internal sealed class GameLibrary
     // when there is none: the page hangs it on the cover's address so a new one is fetched.
     internal sealed record GameDetail(long Id, string Source, string Title, string LaunchCommand,
                                       string? InstallPath, long ArtStamp, bool Manual, bool ArtManual,
-                                      bool Pointer, StreamQuality Quality, SplashMode Splash,
+                                      StreamQuality Quality, SplashMode Splash,
                                       string? Arguments = null, bool NoStream = false);
 
     internal IReadOnlyList<GameDetail> Details()
@@ -648,7 +648,7 @@ internal sealed class GameLibrary
         {
             using var command = _database.Command(
                 "SELECT id, source, title, launch_command, install_path, box_art_path, manual, " +
-                "art_manual, pointer, quality, starting_card, arguments, no_stream FROM games " +
+                "art_manual, quality, starting_card, arguments, no_stream FROM games " +
                 "WHERE removed_at IS NULL ORDER BY title COLLATE NOCASE;");
 
             using var reader = command.ExecuteReader();
@@ -663,11 +663,10 @@ internal sealed class GameLibrary
                     ArtStamp(reader.IsDBNull(5) ? null : reader.GetString(5)),
                     reader.GetInt64(6) != 0,
                     reader.GetInt64(7) != 0,
-                    reader.GetInt64(8) != 0,
-                    Quality(reader.GetInt64(9)),
-                    Splash(reader.GetInt64(10)),
-                    reader.IsDBNull(11) ? null : reader.GetString(11),
-                    reader.GetInt64(12) != 0));
+                    Quality(reader.GetInt64(8)),
+                    Splash(reader.GetInt64(9)),
+                    reader.IsDBNull(10) ? null : reader.GetString(10),
+                    reader.GetInt64(11) != 0));
             }
         }
 
@@ -966,20 +965,6 @@ internal sealed class GameLibrary
         return paths;
     }
 
-    // Whether this server draws the pointer into this game's picture. Most games draw their own,
-    // and the two together are two pointers a step apart; the ones that draw none need this.
-    internal void RecordPointer(long gameId, bool wanted)
-    {
-        lock (_database.Gate)
-        {
-            using var command = _database.Command(
-                "UPDATE games SET pointer = $pointer WHERE id = $id;");
-            command.Parameters.AddWithValue("$pointer", wanted ? 1 : 0);
-            command.Parameters.AddWithValue("$id", gameId);
-            command.ExecuteNonQuery();
-        }
-    }
-
     // When the starting card covers this game's start. Auto by default, which is also what the
     // old "on" (1) reads as; the old "off" (0) is Never.
     internal void RecordSplash(long gameId, SplashMode splash)
@@ -1023,7 +1008,7 @@ internal sealed class GameLibrary
         lock (_database.Gate)
         {
             using var command = _database.Command(
-                "SELECT launch_command, install_path, title, pointer, quality, starting_card, " +
+                "SELECT launch_command, install_path, title, quality, starting_card, " +
                 "working_dir, arguments, no_stream " +
                 "FROM games WHERE id = $id AND removed_at IS NULL;");
             command.Parameters.AddWithValue("$id", gameId);
@@ -1035,12 +1020,11 @@ internal sealed class GameLibrary
                 reader.GetString(0),
                 reader.IsDBNull(1) ? null : reader.GetString(1),
                 reader.GetString(2),
-                reader.GetInt64(3) != 0,
-                Quality(reader.GetInt64(4)),
-                Splash(reader.GetInt64(5)),
+                Quality(reader.GetInt64(3)),
+                Splash(reader.GetInt64(4)),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
                 reader.IsDBNull(6) ? null : reader.GetString(6),
-                reader.IsDBNull(7) ? null : reader.GetString(7),
-                reader.GetInt64(8) != 0);
+                reader.GetInt64(7) != 0);
         }
     }
 

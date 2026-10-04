@@ -31,6 +31,7 @@ internal sealed class SessionManager : IDisposable
     private readonly TrayIcon _tray;
     private readonly SessionWatch _sessionWatch;
     private readonly ScaleStore _scales;
+    private readonly MouseKeys _mouseKeys;
     private readonly ConnectionJournal _journal;
     private readonly object _gate = new();
 
@@ -59,7 +60,8 @@ internal sealed class SessionManager : IDisposable
 
     internal SessionManager(AppConfig config, DisplayOutput output, EncoderCapabilities encoder,
                             GameLibrary games, GamepadHub gamepads, TrayIcon tray,
-                            SessionWatch sessionWatch, ScaleStore scales, ConnectionJournal journal)
+                            SessionWatch sessionWatch, ScaleStore scales, MouseKeys mouseKeys,
+                            ConnectionJournal journal)
     {
         _config = config;
         _output = output;
@@ -69,6 +71,7 @@ internal sealed class SessionManager : IDisposable
         _tray = tray;
         _sessionWatch = sessionWatch;
         _scales = scales;
+        _mouseKeys = mouseKeys;
         _journal = journal;
 
         AdoptProgram();
@@ -390,7 +393,7 @@ internal sealed class SessionManager : IDisposable
 
         try
         {
-            var session = new StreamSession(_config, _output, _encoder, _gamepads, _tray, _scales,
+            var session = new StreamSession(_config, _output, _encoder, _gamepads, _tray, _scales, _mouseKeys,
                 request, negotiation, Ended, title, poster, notice: Text.T("{0} is running on the host", title));
 
             lock (_gate)
@@ -493,9 +496,8 @@ internal sealed class SessionManager : IDisposable
 
         try
         {
-            var session = new StreamSession(_config, output, _encoder, _gamepads, _tray, _scales,
+            var session = new StreamSession(_config, output, _encoder, _gamepads, _tray, _scales, _mouseKeys,
                 request, negotiation, Ended, target?.Title, poster, GameIsUp, WindowWaiting,
-                gamePointer: target?.Pointer ?? false,
                 gameQuality: target?.Quality ?? StreamQuality.High,
                 splash: target?.Splash ?? SplashMode.Auto, preAdapted: preAdapted);
 
@@ -1080,9 +1082,6 @@ internal sealed class StreamSession : IDisposable
         return screen;
     }
     private readonly Action<string> _ended;
-    // Whether this game asked for a pointer of this server's drawing. See where it is used.
-    private readonly bool _gamePointer;
-
     // What this stream encodes at: the game's own level, one lower when the client is remote.
     private readonly StreamQuality _quality;
 
@@ -1091,9 +1090,6 @@ internal sealed class StreamSession : IDisposable
     private readonly Func<bool> _gameIsUp;
     private readonly Func<bool> _windowWaiting;
     private readonly SplashMode _splash;
-
-    // Auto's pointer: drawn only while a window waits in front, when the game did not ask for one.
-    private bool _pointerFollowsWindow;
 
     private readonly VideoStream _video;
     private readonly AudioStream? _audio;
@@ -1115,8 +1111,8 @@ internal sealed class StreamSession : IDisposable
     // how hard to ration key frames; written on the control thread, so through Volatile.
     private long _lastLossTicks;
 
-    // Whether this stream carries a pointer of this server's drawing. See where it is set.
-    private bool _drawPointer;
+    // Whether this stream switched MouseKeys on, and so has to put it back.
+    private bool _mouseKeysOn;
 
     private volatile bool _cardDismissed;
 
@@ -1124,6 +1120,7 @@ internal sealed class StreamSession : IDisposable
     // when the client sent neither, in which case CaptureAndEncode adapts the screen itself.
     private readonly DisplayAdaptation? _preAdapted;
     private readonly ScaleStore _scales;
+    private readonly MouseKeys _mouseKeys;
 
     internal int AppId { get; }
 
@@ -1137,12 +1134,11 @@ internal sealed class StreamSession : IDisposable
     private static readonly TimeSpan NoticePatience = TimeSpan.FromSeconds(10);
 
     internal StreamSession(AppConfig config, DisplayOutput output, EncoderCapabilities capabilities,
-                           GamepadHub gamepads, TrayIcon tray, ScaleStore scales,
+                           GamepadHub gamepads, TrayIcon tray, ScaleStore scales, MouseKeys mouseKeys,
                            LaunchRequest request,
                            StreamNegotiation negotiation, Action<string> ended,
                            string? gameTitle = null, string? posterPath = null,
                            Func<bool>? gameIsUp = null, Func<bool>? windowWaiting = null,
-                           bool gamePointer = false,
                            StreamQuality gameQuality = StreamQuality.High,
                            SplashMode splash = SplashMode.Auto,
                            DisplayAdaptation? preAdapted = null,
@@ -1154,6 +1150,7 @@ internal sealed class StreamSession : IDisposable
         _preAdapted = preAdapted;
         _notice = notice;
         _scales = scales;
+        _mouseKeys = mouseKeys;
         _capabilities = capabilities;
         _gamepads = gamepads;
         _tray = tray;
@@ -1161,7 +1158,6 @@ internal sealed class StreamSession : IDisposable
         _ended = ended;
         _gameTitle = gameTitle;
         _splash = splash;
-        _gamePointer = gamePointer;
 
         // A client from outside this network is on a link nobody measured, so it is given one level
         // less than the game asks for. Low is the floor: there is nothing below it to drop to.
@@ -1303,24 +1299,12 @@ internal sealed class StreamSession : IDisposable
 
             _input.SetScreen(display.Bounds);
 
-            // Into the desktop always, into a game when it was marked as needing one, or under Auto
-            // while a window waits in front: two pointers are worse than none.
-            _pointerFollowsWindow = !desktop && !_gamePointer && _splash == SplashMode.Auto;
-            _drawPointer = desktop || _gamePointer || _pointerFollowsWindow;
+            // The pointer is whatever Windows shows, game or desktop alike. With no mouse here it
+            // shows none, so MouseKeys is switched on first and the pointer nudged into view.
+            _mouseKeysOn = _mouseKeys.TurnOnForStream();
 
-            if (!desktop)
-            {
-                Log.Info(_gamePointer ? "this game is marked as needing a pointer, so one is drawn into its picture"
-                    : _pointerFollowsWindow ? "the pointer is drawn only while a window such as a launcher waits in front"
-                    : "this is a game, so the pointer is left to the game to draw");
-            }
-
-            duplicator = DesktopDuplicator.Create(_output, _drawPointer, preferHdr: hdr);
-            duplicator.PointerSuppressed = _pointerFollowsWindow;
-
-            // A machine with no mouse of its own hides the pointer, so it is nudged once here
-            // rather than left to the first move the client sends.
-            if (_drawPointer && !_pointerFollowsWindow) ClientInput.ShowPointer();
+            duplicator = DesktopDuplicator.Create(_output, preferHdr: hdr);
+            ClientInput.ShowPointer();
 
             // The screen may have refused HDR, or DXGI handed back the ordinary form: the encoder
             // is told what is in the texture, not what was asked for.
@@ -1664,13 +1648,6 @@ internal sealed class StreamSession : IDisposable
                     }
                 }
 
-                // Auto's pointer comes and goes with the window in front, nudged into view as it comes.
-                if (_pointerFollowsWindow && duplicator.PointerSuppressed == _windowWaiting())
-                {
-                    duplicator.PointerSuppressed = !duplicator.PointerSuppressed;
-                    if (!duplicator.PointerSuppressed) ClientInput.ShowPointer();
-                }
-
                 // The pointer is composited once, for the frame about to go out: drawn while
                 // capturing, a move over an unchanged desktop leaves it beside the last one.
                 var pointerMoved = card is null && duplicator.DrawPointer();
@@ -1753,6 +1730,7 @@ internal sealed class StreamSession : IDisposable
             // Last, after the duplication is gone: putting the screen back is itself a mode
             // change, which a live duplication would not survive.
             display?.Dispose();
+            if (_mouseKeysOn) _mouseKeys.PutBack();
 
             // The hold on the display and the system, and the input desktop this thread attached
             // itself to for the capture: both are this thread's own and go with it.
@@ -1861,7 +1839,7 @@ internal sealed class StreamSession : IDisposable
 
             try
             {
-                return DesktopDuplicator.Create(_output, _drawPointer, preferHdr: false);
+                return DesktopDuplicator.Create(_output, preferHdr: false);
             }
             catch (Exception error) when (attempt < attempts)
             {

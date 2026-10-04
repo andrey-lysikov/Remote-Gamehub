@@ -396,10 +396,9 @@ internal sealed class WebConsole : IAsyncDisposable
             }
 
             // Save answers with the row's identifier, which is the new one when a game is being
-            // added: the pointer switch belongs to that row and is written straight after.
+            // added: the switches below belong to that row and are written straight after.
             var saved = _games.Save(toSave, title, command, folder,
                 (request.Query("args") ?? string.Empty).Trim(), request.Query("nostream") == "1");
-            _games.RecordPointer(saved, request.Query("pointer") == "1");
 
             if (int.TryParse(request.Query("card"), out var splash) && Enum.IsDefined(typeof(SplashMode), splash))
                 _games.RecordSplash(saved, (SplashMode)splash);
@@ -529,7 +528,6 @@ internal sealed class WebConsole : IAsyncDisposable
                         $"data-args=\"{Escape(game.Arguments ?? string.Empty)}\" " +
                         $"data-nostream={(game.NoStream ? 1 : 0)} " +
                         $"data-folder=\"{Escape(game.InstallPath ?? string.Empty)}\" " +
-                        $"data-pointer={(game.Pointer ? 1 : 0)} " +
                         $"data-quality={(int)game.Quality} " +
                         $"data-card={(int)game.Splash}>");
 
@@ -557,7 +555,7 @@ internal sealed class WebConsole : IAsyncDisposable
 
             // Reset only where there is something to reset: a store's game changed in any way on
             // this page. A game added by hand has no found state to go back to.
-            var changedHere = game.Manual || game.ArtManual || game.Pointer ||
+            var changedHere = game.Manual || game.ArtManual ||
                               game.Quality != StreamQuality.High || game.Splash != SplashMode.Auto;
             var reset = game.Source != "by hand" && changedHere
                 ? $"<button data-do=reset title=\"{Text.T("Reset to what was found")}\">{ResetIcon}</button>"
@@ -674,8 +672,6 @@ internal sealed class WebConsole : IAsyncDisposable
 
             ("blocked", BlockedList()),
             ("available", Available()),
-
-            ("pointer", WebAssets.Part("pointer")),
 
             ("log", Escape(ReadLogTail())));
     }
