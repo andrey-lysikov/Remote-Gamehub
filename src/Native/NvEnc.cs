@@ -66,6 +66,10 @@ internal static unsafe class NvEnc
     // ten bits at the top — DXGI_FORMAT_P010, which is what the colour shader writes.
     internal const int BufferFormatYuv420Ten = 0x00010000;
 
+    // NV_ENC_BUFFER_FORMAT_NV12: eight-bit luma then interleaved chroma — DXGI_FORMAT_NV12, which
+    // the colour shader writes for a standard-range stream.
+    internal const int BufferFormatNv12 = 0x00000001;
+
     internal const int BufferUsageInputImage = 0;          // NV_ENC_INPUT_IMAGE
     internal const int ResourceTypeDirectX = 0;            // NV_ENC_INPUT_RESOURCE_TYPE_DIRECTX
 
@@ -245,11 +249,12 @@ internal static unsafe class NvEnc
     internal const uint TransferCharacteristicSmpte2084 = 16;
     internal const uint ColourMatrixBt2020Ncl = 9;
 
-    // What NVENC itself makes of RGB input: BT.601 matrix, studio range, whatever is asked — so
-    // FFmpeg signals exactly this for RGB, and so does this server. The desktop is Rec. 709/sRGB.
+    // What NVENC itself makes of RGB input — BT.601 matrix, studio range, whatever is asked, which
+    // FFmpeg signals for RGB too — and the matrices the colour shader writes. Primaries are Rec. 709.
     internal const uint ColourPrimariesBt709 = 1;
     internal const uint TransferCharacteristicBt709 = 1;
     internal const uint ColourMatrixSmpte170m = 6;
+    internal const uint ColourMatrixBt709 = 1;
 
     internal const uint H264FlagRepeatSpsPps = 1u << 12;
     internal const uint HevcFlagRepeatSpsPps = 1u << 7;

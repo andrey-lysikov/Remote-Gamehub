@@ -34,6 +34,9 @@ internal sealed record StreamNegotiation(
     // Colour at full resolution instead of quartered: sharper text and smoother gradients for
     // several times the bits. The client's choice, from what /serverinfo offered.
     bool Yuv444,
+    // The YUV the client would like, from x-nv-video[0].encoderCscMode: Limelight.h's colorspace
+    // shifted left once, its range in bit 0. Moonlight 6.2 asks for full-range Rec. 709.
+    YuvColour Colour,
     // The SS_ENC_* bits the client turned on. CONTROL_V2 (0x01) decides the control stream's
     // AES-GCM IV shape; AUDIO (0x04) would oblige the audio stream to encrypt.
     int EncryptionFlags)
@@ -562,6 +565,8 @@ internal sealed class RtspServer : IAsyncDisposable
                 AudioHighQuality: audioHighQuality,
                 HdrRequested: Value("x-nv-video[0].dynamicRangeMode", 0) != 0,
                 Yuv444: yuv444,
+                Colour: new YuvColour(Space: Value("x-nv-video[0].encoderCscMode", 0) >> 1,
+                                      FullRange: (Value("x-nv-video[0].encoderCscMode", 0) & 1) != 0),
                 EncryptionFlags: encryptionFlags);
 
             Log.Event($"negotiated with {peer}: {negotiation.Width}x{negotiation.Height} at " +

@@ -110,7 +110,8 @@ internal static unsafe class VideoEncoders
                                        VideoCodec codec, int width, int height,
                                        int bitrateKbps, int fps, bool hdr = false,
                                        bool yuv444 = false,
-                                       StreamQuality quality = StreamQuality.High)
+                                       StreamQuality quality = StreamQuality.High,
+                                       YuvColour? colour = null)
     {
         if (!capabilities.CanStream)
         {
@@ -160,8 +161,9 @@ internal static unsafe class VideoEncoders
         }
 
         return capabilities.Encoder == VideoEncoder.NvEnc
-            ? NvencEncoder.Open(device, codec, width, height, bitrateKbps, fps, hdr, yuv444, quality)
-            : AmfEncoder.Open(device, codec, width, height, bitrateKbps, fps, hdr, quality);
+            ? NvencEncoder.Open(device, codec, width, height, bitrateKbps, fps, hdr, yuv444, quality,
+                                colour)
+            : AmfEncoder.Open(device, codec, width, height, bitrateKbps, fps, hdr, quality, colour);
     }
 
     // The codec as it is written everywhere a person reads it.

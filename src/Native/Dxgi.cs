@@ -182,6 +182,11 @@ internal static unsafe class Dxgi
     internal const uint DXGI_FORMAT_R16_UNORM = 56;
     internal const uint DXGI_FORMAT_R16G16_UNORM = 35;
 
+    // The eight-bit counterpart for a standard-range stream, addressed the same way.
+    internal const uint DXGI_FORMAT_NV12 = 103;
+    internal const uint DXGI_FORMAT_R8_UNORM = 61;
+    internal const uint DXGI_FORMAT_R8G8_UNORM = 49;
+
     // A high-dynamic-range desktop is really composited as linear half-floats with Rec.709
     // primaries. No encoder takes that, which is what the ten-bit request above exists to avoid.
 

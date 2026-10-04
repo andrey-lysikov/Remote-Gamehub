@@ -7,14 +7,30 @@ using RemoteGameHub.Native;
 
 namespace RemoteGameHub.Media;
 
-// An HDR desktop, which Windows composes as linear scRGB half floats, turned into the ten-bit
-// BT.2020 PQ the encoders take. Two draws per frame: the luma plane, then the chroma one.
+// The YUV the shader writes and the stream says it is: Limelight.h's COLORSPACE_* (0 Rec. 601,
+// 1 Rec. 709, 2 Rec. 2020) and the range. The client asks for both in encoderCscMode.
+internal readonly record struct YuvColour(int Space, bool FullRange)
+{
+    internal const int Rec601 = 0;
+    internal const int Rec709 = 1;
+    internal const int Rec2020 = 2;
+
+    // Kr and Kb from H.273 table 4; Kg follows from the two.
+    internal (double Kr, double Kb) Coefficients => Space switch
+    {
+        Rec601 => (0.299, 0.114),
+        Rec2020 => (0.2627, 0.0593),
+        _ => (0.2126, 0.0722),
+    };
+
+    internal string Name => (Space switch { Rec601 => "BT.601", Rec2020 => "BT.2020", _ => "BT.709" }) +
+                            (FullRange ? ", full range" : ", limited range");
+}
+
+// The captured desktop turned into the YUV the encoder takes, as the client asked for it: an HDR
+// desktop's linear scRGB into ten-bit BT.2020 PQ, an ordinary one's sRGB into eight-bit YUV.
 internal sealed unsafe class ColourConverter : IDisposable
 {
-    // BT.2020 non-constant luminance, from H.273 table 4. Kg follows from the other two.
-    private const double Kr = 0.2627;
-    private const double Kb = 0.0593;
-
     // scRGB says 1.0 is eighty nits, and PQ is written against absolute luminance.
     private const double ScRgbWhiteNits = 80.0;
 
@@ -43,32 +59,39 @@ internal sealed unsafe class ColourConverter : IDisposable
 
     private bool _disposed;
 
+    private readonly bool _hdr;
+    private readonly YuvColour _colour;
+
     internal int Width { get; }
     internal int Height { get; }
 
-    // The P010 texture the encoder is handed. Its content is whatever the last Convert wrote.
+    // The P010 (HDR) or NV12 texture the encoder is handed. Its content is what Convert last wrote.
     internal nint Output => (nint)_output;
 
-    private ColourConverter(void* device, void* context, int width, int height)
+    private ColourConverter(void* device, void* context, int width, int height, bool hdr,
+                            YuvColour colour)
     {
         _device = device;
         _context = context;
         Width = width;
         Height = height;
+        _hdr = hdr;
+        _colour = colour;
     }
 
     // Builds the shader for one stream. Width and height must be even: a chroma sample covers two
     // pixels each way, and the duplication never hands back an odd desktop.
     internal static ColourConverter Open(nint device, nint context, int width, int height,
-                                         bool fullRange)
+                                         bool hdr, YuvColour colour)
     {
-        var converter = new ColourConverter((void*)device, (void*)context, width, height);
+        var converter = new ColourConverter((void*)device, (void*)context, width, height, hdr, colour);
 
         try
         {
-            converter.Build(fullRange);
-            Log.Info($"the HDR desktop is converted to ten-bit BT.2020 PQ in " +
-                     $"{(fullRange ? "full" : "limited")} range before it is encoded");
+            converter.Build();
+            Log.Info(hdr
+                ? $"the HDR desktop is converted to ten-bit BT.2020 PQ, {colour.Name}, before it is encoded"
+                : $"the desktop is converted to eight-bit {colour.Name} before it is encoded");
             return converter;
         }
         catch
@@ -144,9 +167,9 @@ internal sealed unsafe class ColourConverter : IDisposable
         D3D11.Draw(_context, 3);
     }
 
-    private void Build(bool fullRange)
+    private void Build()
     {
-        var source = Hlsl(fullRange);
+        var source = Hlsl(_hdr, _colour);
 
         var vertex = D3DCompiler.Compile(source, "vs", "vs_5_0");
         var luma = D3DCompiler.Compile(source, "luma", "ps_5_0");
@@ -174,7 +197,7 @@ internal sealed unsafe class ColourConverter : IDisposable
             Height = (uint)Height,
             MipLevels = 1,
             ArraySize = 1,
-            Format = Dxgi.DXGI_FORMAT_P010,
+            Format = _hdr ? Dxgi.DXGI_FORMAT_P010 : Dxgi.DXGI_FORMAT_NV12,
             SampleCount = 1,
             Usage = D3D11.D3D11_USAGE_DEFAULT,
             BindFlags = D3D11.D3D11_BIND_RENDER_TARGET | D3D11.D3D11_BIND_SHADER_RESOURCE,
@@ -182,13 +205,13 @@ internal sealed unsafe class ColourConverter : IDisposable
 
         _lumaTarget = D3D11.CreateRenderTargetView(_device, _output, new D3D11RenderTargetViewDesc
         {
-            Format = Dxgi.DXGI_FORMAT_R16_UNORM,
+            Format = _hdr ? Dxgi.DXGI_FORMAT_R16_UNORM : Dxgi.DXGI_FORMAT_R8_UNORM,
             ViewDimension = D3D11.D3D11_RTV_DIMENSION_TEXTURE2D,
         });
 
         _chromaTarget = D3D11.CreateRenderTargetView(_device, _output, new D3D11RenderTargetViewDesc
         {
-            Format = Dxgi.DXGI_FORMAT_R16G16_UNORM,
+            Format = _hdr ? Dxgi.DXGI_FORMAT_R16G16_UNORM : Dxgi.DXGI_FORMAT_R8G8_UNORM,
             ViewDimension = D3D11.D3D11_RTV_DIMENSION_TEXTURE2D,
         });
 
@@ -232,9 +255,15 @@ internal sealed unsafe class ColourConverter : IDisposable
 
     // The whole shader, written with this stream's numbers in it rather than fed a constant
     // buffer: it is built once per stream, and the arithmetic is then plain to read in the source.
-    internal static string Hlsl(bool fullRange)
+    internal static string Hlsl(bool hdr, YuvColour colour)
     {
-        var (y, u, v) = Vectors(fullRange);
+        var bits = hdr ? 10 : 8;
+        var codes = (1 << bits) - 1.0;
+        var (y, u, v) = Vectors(bits, colour);
+
+        // P010 keeps the top ten bits of each word, which drops the fraction of a code rather than
+        // rounding it; half a code added first makes it round. An eight-bit target rounds itself.
+        var bias = hdr ? 0.5 / codes : 0.0;
 
         return $$"""
             Texture2D<float4> source : register(t0);
@@ -269,6 +298,14 @@ internal sealed unsafe class ColourConverter : IDisposable
                 return pow((c1 + c2 * l) / (1 + c3 * l), m2);
             }
 
+            // GDI drew the pointer in plain sRGB, with no notion of nits. Undoing the sRGB curve
+            // puts it on the same Rec. 709 linear scale scRGB already uses for the desktop.
+            float3 fromSrgb(float3 c)
+            {
+                return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
+            }
+
+            #if {{(hdr ? 1 : 0)}}
             // scRGB is linear on Rec. 709 primaries; Rec. 2100 wants Rec. 2020 primaries and PQ.
             float3 encode(float3 rgb)
             {
@@ -282,18 +319,31 @@ internal sealed unsafe class ColourConverter : IDisposable
                 return pq(mul(toRec2020, rgb) * {{Number(ScRgbWhiteNits)}});
             }
 
-            // GDI drew the pointer in plain sRGB, with no notion of nits. Undoing the sRGB curve
-            // puts it on the same Rec. 709 linear scale scRGB already uses for the desktop.
-            float3 fromSrgb(float3 c)
-            {
-                return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
-            }
-
-            // The desktop with the pointer blended over it, in the linear space both are already
-            // in: alpha zero leaves the desktop untouched, which is what the one-pixel stand-in is.
             float3 picture(float4 desktop, float4 pointer)
             {
                 return lerp(desktop.rgb, fromSrgb(pointer.rgb), pointer.a);
+            }
+            #else
+            // An ordinary desktop is sRGB already, gamma and all, which is what the matrix takes.
+            float3 encode(float3 rgb)
+            {
+                return saturate(rgb);
+            }
+
+            float3 picture(float4 desktop, float4 pointer)
+            {
+                return lerp(desktop.rgb, pointer.rgb, pointer.a);
+            }
+            #endif
+
+            // A 4x4 ordered dither, fixed in place so it costs the encoder nothing frame to frame:
+            // up to half a code either way, which the eye averages into the steps a gradient lacks.
+            static const float bayer[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+
+            float dither(float2 position)
+            {
+                uint2 p = uint2(position) & 3;
+                return ((bayer[p.y * 4 + p.x] + 0.5) / 16.0 - 0.5) * {{Number(1 / codes)}} + {{Number(bias)}};
             }
 
             float luma(vertex pixel) : SV_Target
@@ -301,7 +351,8 @@ internal sealed unsafe class ColourConverter : IDisposable
                 float4 desktop = source.Load(int3(pixel.position.xy, 0));
                 float4 pointer = overlay.Load(int3(pixel.position.xy, 0));
                 float3 c = encode(picture(desktop, pointer));
-                return dot(float3({{Number(y.R)}}, {{Number(y.G)}}, {{Number(y.B)}}), c) + {{Number(y.Add)}};
+                return dot(float3({{Number(y.R)}}, {{Number(y.G)}}, {{Number(y.B)}}), c) + {{Number(y.Add)}}
+                       + dither(pixel.position.xy);
             }
 
             float2 chroma(vertex pixel) : SV_Target
@@ -310,32 +361,36 @@ internal sealed unsafe class ColourConverter : IDisposable
                 float4 pointer = overlay.Sample(blend, pixel.texel);
                 float3 c = encode(picture(desktop, pointer));
                 return float2(
-                    dot(float3({{Number(u.R)}}, {{Number(u.G)}}, {{Number(u.B)}}), c) + {{Number(u.Add)}},
-                    dot(float3({{Number(v.R)}}, {{Number(v.G)}}, {{Number(v.B)}}), c) + {{Number(v.Add)}});
+                    dot(float3({{Number(u.R)}}, {{Number(u.G)}}, {{Number(u.B)}}), c) + {{Number(u.Add)}}
+                        + dither(pixel.position.xy),
+                    dot(float3({{Number(v.R)}}, {{Number(v.G)}}, {{Number(v.B)}}), c) + {{Number(v.Add)}}
+                        + dither(pixel.position.yx + 2));
             }
             """;
     }
 
     internal readonly record struct Vector(double R, double G, double B, double Add);
 
-    // The matrix of H.273 section 8.3, for ten bits written into a unorm target: the codes are
-    // scaled by 1023 rather than by 65535, which is what puts them in the top ten bits of P010.
-    internal static (Vector Y, Vector U, Vector V) Vectors(bool fullRange)
+    // The matrix of H.273 section 8.3 for this many bits, written into a unorm target: the codes
+    // are scaled by 2^bits - 1, which for ten bits puts them in the top ten bits of P010.
+    internal static (Vector Y, Vector U, Vector V) Vectors(int bits, YuvColour colour)
     {
-        const double kg = 1.0 - Kr - Kb;
-        const double codes = (1 << 10) - 1;
+        var (kr, kb) = colour.Coefficients;
+        var kg = 1.0 - kr - kb;
+        var codes = (1 << bits) - 1.0;
+        var step = (double)(1 << (bits - 8));
 
-        var lumaScale = (fullRange ? codes : 4 * 219) / codes;
-        var lumaOffset = (fullRange ? 0 : 4 * 16) / codes;
-        var chromaScale = (fullRange ? codes : 4 * 224) / codes;
-        var chromaOffset = (fullRange ? 1 << 9 : 4 * 128) / codes;
+        var lumaScale = (colour.FullRange ? codes : 219 * step) / codes;
+        var lumaOffset = (colour.FullRange ? 0 : 16 * step) / codes;
+        var chromaScale = (colour.FullRange ? codes : 224 * step) / codes;
+        var chromaOffset = (colour.FullRange ? 1 << (bits - 1) : 128 * step) / codes;
 
         return (
-            new Vector(Kr * lumaScale, kg * lumaScale, Kb * lumaScale, lumaOffset),
-            new Vector(-0.5 * Kr / (1.0 - Kb) * chromaScale, -0.5 * kg / (1.0 - Kb) * chromaScale,
+            new Vector(kr * lumaScale, kg * lumaScale, kb * lumaScale, lumaOffset),
+            new Vector(-0.5 * kr / (1.0 - kb) * chromaScale, -0.5 * kg / (1.0 - kb) * chromaScale,
                        0.5 * chromaScale, chromaOffset),
-            new Vector(0.5 * chromaScale, -0.5 * kg / (1.0 - Kr) * chromaScale,
-                       -0.5 * Kb / (1.0 - Kr) * chromaScale, chromaOffset));
+            new Vector(0.5 * chromaScale, -0.5 * kg / (1.0 - kr) * chromaScale,
+                       -0.5 * kb / (1.0 - kr) * chromaScale, chromaOffset));
     }
 
     private static string Number(double value) =>

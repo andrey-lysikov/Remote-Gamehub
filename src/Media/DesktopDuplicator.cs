@@ -302,8 +302,8 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
             Height = (uint)Height,
             MipLevels = 1,
             ArraySize = 1,
-            // Whatever the duplication settled on, to the encoder as it is: converting to NV12
-            // here would mean a shader and a second texture for a job the encoder does itself.
+            // Whatever the duplication settled on; the colour shader reads it from here (and the
+            // encoder itself only for 4:4:4), so SHADER_RESOURCE below is needed either way.
             Format = FrameFormat,
             SampleCount = 1,
             SampleQuality = 0,

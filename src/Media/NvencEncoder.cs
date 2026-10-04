@@ -31,9 +31,9 @@ internal sealed unsafe class NvencEncoder : IVideoEncoder
     private void* _registered;
     private nint _registeredTexture;
     private readonly bool _hdr;
-    // Whether the ten-bit samples use the whole range or the studio one. The shader that made
-    // them and this flag must agree, or the client stretches what was never compressed.
-    private readonly bool _fullRange;
+    // The YUV ColourConverter made, null when the captured BGRA comes in for NVENC to convert. The
+    // shader and the stream's own colour description must agree, or the client shows it wrong.
+    private readonly YuvColour? _colour;
     private readonly bool _yuv444;
     private readonly StreamQuality _quality;
     private byte[] _header = Array.Empty<byte>();
@@ -46,28 +46,30 @@ internal sealed unsafe class NvencEncoder : IVideoEncoder
     public ReadOnlyMemory<byte> Header => _header;
 
     private NvencEncoder(NvEnc.FunctionList* api, VideoCodec codec, int width, int height,
-                         bool hdr, bool fullRange, bool yuv444, StreamQuality quality)
+                         bool hdr, YuvColour? colour, bool yuv444, StreamQuality quality)
     {
         _api = api;
         Codec = codec;
         Width = width;
         Height = height;
         _hdr = hdr;
-        _fullRange = fullRange;
+        _colour = colour;
         _yuv444 = yuv444;
         _quality = quality;
     }
 
-    // What the input texture is: the desktop as it was captured, or — for high dynamic range —
-    // the ten-bit BT.2020 PQ that ColourConverter wrote, where the matrix is ours and not the card's.
-    private int InputFormat => _hdr ? NvEnc.BufferFormatYuv420Ten : NvEnc.BufferFormatArgb;
+    // What the input texture is: the YUV ColourConverter wrote, ten bits for high dynamic range and
+    // eight otherwise, or the desktop as captured (4:4:4), where the matrix is the card's.
+    private int InputFormat => _hdr ? NvEnc.BufferFormatYuv420Ten
+                             : _colour is not null ? NvEnc.BufferFormatNv12
+                             : NvEnc.BufferFormatArgb;
 
     // Opens a session on the device the capturer owns. Throws with the driver's own words when it
     // refuses; the caller decides whether that ends the stream or the choice of encoder.
     internal static NvencEncoder Open(nint device, VideoCodec codec, int width, int height,
                                       int bitrateKbps, int fps, bool hdr = false, bool yuv444 = false,
                                       StreamQuality quality = StreamQuality.High,
-                                      bool fullRange = false)
+                                      YuvColour? colour = null)
     {
         var api = NvEnc.Api();
         if (api is null)
@@ -88,7 +90,10 @@ internal sealed unsafe class NvencEncoder : IVideoEncoder
                 "in ten bits by this server.");
         }
 
-        var encoder = new NvencEncoder(api, codec, width, height, hdr, fullRange, yuv444, quality);
+        if (hdr && colour is null)
+            throw new InvalidOperationException("high dynamic range comes only from the colour shader");
+
+        var encoder = new NvencEncoder(api, codec, width, height, hdr, colour, yuv444, quality);
         try
         {
             encoder.OpenSession(device);
@@ -176,12 +181,17 @@ internal sealed unsafe class NvencEncoder : IVideoEncoder
         config.Rc.MaxQpIntra = settings.MaxQp;
 
         // What the picture is, said in the stream itself, always. Moonlight 6.2 takes a stream
-        // that says nothing for the full-range Rec. 709 it asked for, and shows ours washed out.
-        var (primaries, transfer, matrix, fullRange) = _hdr
-            ? (NvEnc.ColourPrimariesBt2020, NvEnc.TransferCharacteristicSmpte2084,
-               NvEnc.ColourMatrixBt2020Ncl, _fullRange ? 1u : 0u)
-            : (NvEnc.ColourPrimariesBt709, NvEnc.TransferCharacteristicBt709,
-               NvEnc.ColourMatrixSmpte170m, 0u);
+        // that says nothing for the full-range Rec. 709 it asked for, and shows anything else wrong.
+        var (primaries, transfer) = _hdr
+            ? (NvEnc.ColourPrimariesBt2020, NvEnc.TransferCharacteristicSmpte2084)
+            : (NvEnc.ColourPrimariesBt709, NvEnc.TransferCharacteristicBt709);
+        var matrix = (_colour?.Space) switch
+        {
+            null or YuvColour.Rec601 => NvEnc.ColourMatrixSmpte170m,
+            YuvColour.Rec2020 => NvEnc.ColourMatrixBt2020Ncl,
+            _ => NvEnc.ColourMatrixBt709,
+        };
+        var fullRange = _colour is { FullRange: true } ? 1u : 0u;
 
         if (Codec == VideoCodec.Av1)
         {
@@ -274,8 +284,9 @@ internal sealed unsafe class NvencEncoder : IVideoEncoder
                  $"{_quality.ToString().ToLowerInvariant()} quality, ultra-low-latency, " +
                  $"adaptive quantisation at {settings.AqStrength}, " +
                  $"quantiser capped at {settings.MaxQp}; the stream says it is " +
-                 (_hdr ? $"BT.2020 PQ, {(_fullRange ? "full" : "limited")} range"
-                       : "BT.709 colours with the BT.601 matrix, limited range"));
+                 (_hdr ? $"BT.2020 PQ, {_colour!.Value.Name}"
+                       : _colour is { } colour ? $"{colour.Name} from the colour shader"
+                       : "BT.601, limited range, converted by NVENC"));
     }
 
     private void ReadSequenceHeader()

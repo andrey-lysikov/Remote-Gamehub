@@ -1060,6 +1060,37 @@ internal sealed class StreamSession : IDisposable
     // explanation of a picture that stutters at a rate the client and the encoder both agreed to.
     internal string ScreenHz => SentRefreshHz.ToString("0.##", CultureInfo.InvariantCulture);
 
+    // The colour shader and the encoder behind it, for one capture: through the shader always, as
+    // the YUV the client asked for, but for 4:4:4, which the card converts from BGRA itself.
+    private (ColourConverter? Converter, IVideoEncoder Encoder) OpenEncoding(
+        DesktopDuplicator duplicator, bool tenBit, bool yuv444)
+    {
+        YuvColour? colour = tenBit ? _negotiation.Colour with { Space = YuvColour.Rec2020 }
+                          : yuv444 ? (YuvColour?)null
+                          : _negotiation.Colour;
+
+        ColourConverter? converter = null;
+        try
+        {
+            if (colour is { } wanted)
+            {
+                converter = ColourConverter.Open(duplicator.Device, duplicator.Context,
+                    duplicator.Width, duplicator.Height, tenBit, wanted);
+            }
+
+            var encoder = VideoEncoders.Open(duplicator.Device, _capabilities, _negotiation.Codec,
+                duplicator.Width, duplicator.Height, _negotiation.BitrateKbps, SendFps(duplicator),
+                tenBit, yuv444, _quality, colour);
+
+            return (converter, encoder);
+        }
+        catch
+        {
+            converter?.Dispose();
+            throw;
+        }
+    }
+
     // Whether the client has been told its frame rate is more than the screen gives. Once a stream.
     private bool _fpsCapSaid;
 
@@ -1350,17 +1381,7 @@ internal sealed class StreamSession : IDisposable
                              "chroma only, so this stream keeps 4:2:0");
                 }
 
-                var yuv444 = !tenBit && _negotiation.Yuv444;
-
-                if (tenBit)
-                {
-                    converter = ColourConverter.Open(duplicator.Device, duplicator.Context,
-                        duplicator.Width, duplicator.Height, fullRange: false);
-                }
-
-                encoder = VideoEncoders.Open(duplicator.Device, _capabilities, _negotiation.Codec,
-                    duplicator.Width, duplicator.Height, _negotiation.BitrateKbps,
-                    SendFps(duplicator), tenBit, yuv444, _quality);
+                (converter, encoder) = OpenEncoding(duplicator, tenBit, !tenBit && _negotiation.Yuv444);
             }
             catch (Exception error) when (tenBit)
             {
@@ -1378,9 +1399,7 @@ internal sealed class StreamSession : IDisposable
                     duplicator = OpenCaptureAfterModeChange();
                 }
 
-                encoder = VideoEncoders.Open(duplicator.Device, _capabilities, _negotiation.Codec,
-                    duplicator.Width, duplicator.Height, _negotiation.BitrateKbps,
-                    SendFps(duplicator), hdr: false, yuv444: _negotiation.Yuv444, quality: _quality);
+                (converter, encoder) = OpenEncoding(duplicator, tenBit: false, _negotiation.Yuv444);
 
                 sentHdr = false;
             }
@@ -1566,18 +1585,12 @@ internal sealed class StreamSession : IDisposable
                         // The shader follows the capture (a new size, or a desktop back in eight
                         // bits), and the encoder takes what the shader writes or the capture itself.
                         converter?.Dispose();
-                        converter = duplicator.IsHdrDesktop && hdr
-                            ? ColourConverter.Open(duplicator.Device, duplicator.Context,
-                                                   duplicator.Width, duplicator.Height,
-                                                   fullRange: false)
-                            : null;
-
+                        converter = null;
                         encoder.Dispose();
-                        encoder = VideoEncoders.Open(duplicator.Device, _capabilities,
-                            _negotiation.Codec, duplicator.Width, duplicator.Height,
-                            _negotiation.BitrateKbps, SendFps(duplicator),
-                            hdr: converter is not null,
-                            yuv444: converter is null && _negotiation.Yuv444, _quality);
+
+                        var reopenedTenBit = duplicator.IsHdrDesktop && hdr;
+                        (converter, encoder) = OpenEncoding(duplicator, reopenedTenBit,
+                            !reopenedTenBit && _negotiation.Yuv444);
                         frameInterval = TimeSpan.FromSeconds(1.0 / SendFps(duplicator));
                         _keyFrameWanted = true;
 

@@ -7,8 +7,8 @@ using RemoteGameHub.Native;
 
 namespace RemoteGameHub.Media;
 
-// The AMF session: the capturer's BGRA texture goes in, H.264 or HEVC access units come out, one
-// frame at a time. Names and enum values come from VideoEncoderVCE.h and VideoEncoderHEVC.h.
+// The AMF session: the colour shader's YUV (or the capturer's BGRA) goes in, H.264, HEVC or AV1
+// access units come out, one frame at a time. Names and values from the AMF SDK's own headers.
 internal sealed unsafe class AmfEncoder : IVideoEncoder
 {
     // How long one frame may reasonably take before the encoder is declared stuck.
@@ -46,6 +46,8 @@ internal sealed unsafe class AmfEncoder : IVideoEncoder
     };
 
     private readonly bool _hdr;
+    // The YUV ColourConverter made, or null when BGRA comes in for AMF to convert by its own lights.
+    private readonly YuvColour? _colour;
     private readonly StreamQuality _quality;
     private void* _context;
     private void* _component;
@@ -61,18 +63,21 @@ internal sealed unsafe class AmfEncoder : IVideoEncoder
     public int Height { get; }
     public ReadOnlyMemory<byte> Header => _header;
 
-    private AmfEncoder(VideoCodec codec, int width, int height, bool hdr, StreamQuality quality)
+    private AmfEncoder(VideoCodec codec, int width, int height, bool hdr, YuvColour? colour,
+                       StreamQuality quality)
     {
         Codec = codec;
         Width = width;
         Height = height;
         _hdr = hdr;
+        _colour = colour;
         _quality = quality;
     }
 
     internal static AmfEncoder Open(nint device, VideoCodec codec, int width, int height,
                                     int bitrateKbps, int fps, bool hdr = false,
-                                    StreamQuality quality = StreamQuality.High)
+                                    StreamQuality quality = StreamQuality.High,
+                                    YuvColour? colour = null)
     {
         var factory = Amf.Factory();
         if (factory is null)
@@ -92,7 +97,10 @@ internal sealed unsafe class AmfEncoder : IVideoEncoder
                 "ten bits by this server.");
         }
 
-        var encoder = new AmfEncoder(codec, width, height, hdr, quality);
+        if (hdr && colour is null)
+            throw new InvalidOperationException("high dynamic range comes only from the colour shader");
+
+        var encoder = new AmfEncoder(codec, width, height, hdr, colour, quality);
         try
         {
             encoder.OpenPipeline(factory, device, bitrateKbps, fps);
@@ -137,7 +145,10 @@ internal sealed unsafe class AmfEncoder : IVideoEncoder
         Log.Info($"AMF session open: {VideoEncoders.Name(Codec)}" +
                  (_hdr ? " Main10 (high dynamic range)" : string.Empty) +
                  $", {Width}x{Height}, {bitrateKbps} kbit/s CBR at {fps} fps, " +
-                 $"{_quality.ToString().ToLowerInvariant()} quality");
+                 $"{_quality.ToString().ToLowerInvariant()} quality; the stream says it is " +
+                 (_colour is { } colour
+                     ? $"{(_hdr ? "BT.2020 PQ, " : string.Empty)}{colour.Name} from the colour shader"
+                     : "whatever AMF makes of BGRA"));
     }
 
     private bool TryOpenComponent(void* factory, int bitrateKbps, int fps, bool ultraLowLatency,
@@ -214,19 +225,14 @@ internal sealed unsafe class AmfEncoder : IVideoEncoder
             // before Init, which is what fixes the shape of everything after it.
             Amf.SetInt64(_component, "HevcColorBitDepth", 10);
             Amf.SetInt64(_component, "HevcProfile", 2);   // AMF_VIDEO_ENCODER_HEVC_PROFILE_MAIN_10
-
-            // What arrives is already BT.2020 PQ from the colour shader, and it goes out as it
-            // came: nothing here asks the card to convert anything, only to say what it has.
-            Amf.SetInt64(_component, "HevcInColorProfile", Amf.ColorProfile2020);
-            Amf.SetInt64(_component, "HevcInColorPrimaries", Amf.ColorPrimariesBt2020);
-            Amf.SetInt64(_component, "HevcInColorTransferChar", Amf.ColorTransferSmpte2084);
-            Amf.SetInt64(_component, "HevcOutColorProfile", Amf.ColorProfile2020);
-            Amf.SetInt64(_component, "HevcOutColorPrimaries", Amf.ColorPrimariesBt2020);
-            Amf.SetInt64(_component, "HevcOutColorTransferChar", Amf.ColorTransferSmpte2084);
         }
 
+        if (_colour is { } colour) DescribeColour(colour);
+
         result = Amf.ComponentInit(_component,
-            _hdr ? Amf.SurfaceFormatP010 : Amf.SurfaceFormatBgra, Width, Height);
+            _hdr ? Amf.SurfaceFormatP010
+            : _colour is not null ? Amf.SurfaceFormatNv12
+            : Amf.SurfaceFormatBgra, Width, Height);
         if (result != Amf.Ok)
         {
             refusal = $"Init: {Amf.Describe(result)}";
@@ -235,6 +241,37 @@ internal sealed unsafe class AmfEncoder : IVideoEncoder
 
         refusal = string.Empty;
         return true;
+    }
+
+    // What arrives is already the YUV the client asked for, and it goes out as it came: the same
+    // profile in and out asks the card to convert nothing, only to say what it has. Before Init.
+    private void DescribeColour(YuvColour colour)
+    {
+        var profile = (colour.Space, colour.FullRange) switch
+        {
+            (YuvColour.Rec601, false) => Amf.ColorProfile601,
+            (YuvColour.Rec601, true) => Amf.ColorProfileFull601,
+            (YuvColour.Rec2020, false) => Amf.ColorProfile2020,
+            (YuvColour.Rec2020, true) => Amf.ColorProfileFull2020,
+            (_, false) => Amf.ColorProfile709,
+            (_, true) => Amf.ColorProfileFull709,
+        };
+        var primaries = _hdr ? Amf.ColorPrimariesBt2020 : Amf.ColorPrimariesBt709;
+        var transfer = _hdr ? Amf.ColorTransferSmpte2084 : Amf.ColorTransferBt709;
+
+        // AV1 spells In and Out out in full, and every codec names the two ranges its own way.
+        var (input, output) = Av1 ? ("Av1Input", "Av1Output") : (P("In"), P("Out"));
+        Amf.SetInt64(_component, input + "ColorProfile", profile);
+        Amf.SetInt64(_component, input + "ColorPrimaries", primaries);
+        Amf.SetInt64(_component, input + "ColorTransferChar", transfer);
+        Amf.SetInt64(_component, output + "ColorProfile", profile);
+        Amf.SetInt64(_component, output + "ColorPrimaries", primaries);
+        Amf.SetInt64(_component, output + "ColorTransferChar", transfer);
+
+        Amf.SetBool(_component, P("InputFullRangeColor"), colour.FullRange);
+        if (Hevc) Amf.SetInt64(_component, "HevcNominalRange", colour.FullRange ? 1 : 0);
+        else if (Av1) Amf.SetBool(_component, "Av1NominalRange", colour.FullRange);
+        else Amf.SetBool(_component, "FullRangeColor", colour.FullRange);
     }
 
     // The SPS/PPS (and VPS) buffer the encoder built during Init, exposed as the

@@ -20,10 +20,20 @@ internal static unsafe class Amf
     // the same DXGI_FORMAT_P010 the colour shader writes.
     internal const int SurfaceFormatP010 = 10;
 
+    // AMF_SURFACE_NV12: the eight-bit counterpart, which the shader writes for standard range.
+    internal const int SurfaceFormatNv12 = 1;
+
     // The colour of what goes in and what comes out, from ColorSpace.h. The profile carries the
-    // matrix and the range together: 2020 is BT.2020 in studio range.
+    // matrix and the range together: 0 to 2 studio range, 3, 7 and 8 the same matrices full.
+    internal const long ColorProfile601 = 0;
+    internal const long ColorProfile709 = 1;
     internal const long ColorProfile2020 = 2;
+    internal const long ColorProfileFull601 = 3;
+    internal const long ColorProfileFull709 = 7;
+    internal const long ColorProfileFull2020 = 8;
+    internal const long ColorPrimariesBt709 = 1;
     internal const long ColorPrimariesBt2020 = 9;
+    internal const long ColorTransferBt709 = 1;
     internal const long ColorTransferSmpte2084 = 16;
     internal const int Dx11VersionDefault = 110; // AMF_DX11_0
 
