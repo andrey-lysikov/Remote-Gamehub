@@ -37,7 +37,12 @@ internal static class ConfFormat
         config.HostName = file.Text("General", "HostName", config.HostName);
         config.VirtualDisplay = file.Bool("General", "VirtualDisplay", config.VirtualDisplay);
 
-        config.Output = file.Text("Display", "Output", config.Output);
+        // [Display] Output until 2.2: read from there while [General] has none, so the file is
+        // written again in the new shape with the screen the person chose, not "auto".
+        var oldOutput = file.Has("Display", "Output")
+            ? file.Text("Display", "Output", config.Output)
+            : config.Output;
+        config.Output = file.Text("General", "Output", oldOutput);
 
         config.PortBase = file.Number("Network", "PortBase", config.PortBase,
             MinPortBase, MaxPortBase, warn);
@@ -80,8 +85,7 @@ internal static class ConfFormat
         writer.Note("Prefer a virtual display driver over a real screen, when one is found. This server never\n" +
                     "installs one itself; the installer's own checkbox does, if you asked it to.");
         writer.Key("VirtualDisplay", config.VirtualDisplay);
-
-        writer.Section("Display");
+        writer.Blank();
         writer.Note("Which screen to stream: \"auto\" for the one attached to the desktop, a screen's own\n" +
                     "number (shown in the log at startup) or a piece of its name for another.");
         writer.Key("Output", config.Output);

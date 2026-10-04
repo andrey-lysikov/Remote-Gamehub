@@ -60,6 +60,10 @@ internal sealed class AppConfig
     // the machine — this server never installs or fetches one; see the installer's checkbox.
     internal bool VirtualDisplay { get; set; } = false;
 
+    // Which screen is streamed. The codec, the frame rate and the bitrate have no setting of their
+    // own: they are the client's to choose, and every ceiling here was caught halving one silently.
+    internal string Output { get; set; } = "auto";
+
     // [Network]
     internal int PortBase { get; set; } = AppParameters.Ports.DefaultBase;
     internal string BindAddress { get; set; } = "any";
@@ -78,10 +82,6 @@ internal sealed class AppConfig
     // refusal in a row, up to a day. Only while Upnp is on; zero attempts turns it off.
     internal int BlockAfterFailures { get; set; } = 5;
     internal int BlockMinutes { get; set; } = 15;
-
-    // [Display]. The codec, the frame rate and the bitrate have no setting of their own: they are
-    // the client's to choose, and every ceiling here was caught halving one silently.
-    internal string Output { get; set; } = "auto";
 
     // [Games]
     internal bool Steam { get; set; } = true;

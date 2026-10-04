@@ -112,7 +112,7 @@ internal static class Preflight
                 "    This server streams what a graphics card is actually drawing, so it needs a\n" +
                 "    monitor that is switched on, or an EDID emulator plugged into the card. A\n" +
                 "    card with nothing attached produces no output to duplicate.\n" +
-                $"    Setting: [Display] Output = {config.Output}\n" +
+                $"    Setting: [General] Output = {config.Output}\n" +
                 "    The screens this machine has are listed above; the value in brackets after\n" +
                 "    \"Output =\" is what to write there.");
         }
@@ -136,7 +136,7 @@ internal static class Preflight
                 "    desktop in software cannot hold the latency this server exists for, and a\n" +
                 "    stream that quietly became unplayable would be worse than this message.\n" +
                 "    What to do: attach the monitor to the NVIDIA or AMD card, or point\n" +
-                "    [Display] Output at a screen that is already on one.");
+                "    [General] Output at a screen that is already on one.");
         }
 
         if (!adapter.LooksDiscrete)
@@ -150,7 +150,7 @@ internal static class Preflight
                 $"Adapter {adapter.Index} \"{adapter.Name}\" reports {memory} GB of dedicated\n" +
                 "memory, which is what an integrated graphics part reports. Its encoder is shared\n" +
                 "with everything else the processor is doing, and the stream may stutter under load.\n" +
-                "If a discrete card is present, attach the monitor to it or set [Display] Output to\n" +
+                "If a discrete card is present, attach the monitor to it or set [General] Output to\n" +
                 "one of its screens.");
         }
 

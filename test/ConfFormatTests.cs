@@ -112,14 +112,29 @@ public class ConfFormatTests
     [Fact]
     public void A_file_from_before_a_setting_existed_reports_it_as_missing()
     {
-        // What a file this server wrote before VirtualDisplay and [Display] existed looks like:
+        // What a file this server wrote before VirtualDisplay and Output existed looks like:
         // everything else present, those two gone entirely.
         var file = ConfFile.Parse("[General]\nHostName = Kitchen\n");
         ConfFormat.Read(file, _ => { });
 
         Assert.Contains(("General", "VirtualDisplay"), file.MissingKeys);
-        Assert.Contains(("Display", "Output"), file.MissingKeys);
+        Assert.Contains(("General", "Output"), file.MissingKeys);
+        Assert.DoesNotContain(("Display", "Output"), file.MissingKeys);
         Assert.DoesNotContain(("General", "HostName"), file.MissingKeys);
+    }
+
+    [Fact]
+    public void A_screen_chosen_under_the_old_Display_section_is_kept_and_moved()
+    {
+        var file = ConfFile.Parse("[General]\nHostName = Kitchen\n\n[Display]\nOutput = 2\n");
+        var config = ConfFormat.Read(file, _ => { });
+
+        Assert.Equal("2", config.Output);
+
+        // Missing where it now belongs, so the file is written again with it under [General].
+        Assert.Contains(("General", "Output"), file.MissingKeys);
+        Assert.Contains("Output = 2", ConfFormat.Write(config));
+        Assert.DoesNotContain("[Display]", ConfFormat.Write(config));
     }
 
     [Theory]

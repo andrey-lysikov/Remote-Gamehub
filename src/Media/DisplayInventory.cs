@@ -15,7 +15,7 @@ internal sealed record DisplayOutput(
     Rect Bounds,
     bool AttachedToDesktop)
 {
-    // The number shown in the log and accepted by [Display] Output.
+    // The number shown in the log and accepted by [General] Output.
     internal string Label => $"{AdapterIndex}.{OutputIndex}";
 
     internal bool IsPrimary => AttachedToDesktop && Bounds.Left == 0 && Bounds.Top == 0;
@@ -158,7 +158,7 @@ internal static unsafe class DisplayInventory
         return outputs;
     }
 
-    // Resolves [Display] Output: auto takes the virtual display driver when asked for and found,
+    // Resolves [General] Output: auto takes the virtual display driver when asked for and found,
     // else the primary screen; a label such as 0.1 an exact output; anything else the device name.
     internal static DisplayOutput? Select(IReadOnlyList<GraphicsAdapter> adapters, string wanted,
                                           bool preferVirtualDisplay, out string reason)
