@@ -175,6 +175,14 @@ internal sealed unsafe class NvencEncoder : IVideoEncoder
         config.Rc.MaxQpInterB = settings.MaxQp;
         config.Rc.MaxQpIntra = settings.MaxQp;
 
+        // What the picture is, said in the stream itself, always. Moonlight 6.2 takes a stream
+        // that says nothing for the full-range Rec. 709 it asked for, and shows ours washed out.
+        var (primaries, transfer, matrix, fullRange) = _hdr
+            ? (NvEnc.ColourPrimariesBt2020, NvEnc.TransferCharacteristicSmpte2084,
+               NvEnc.ColourMatrixBt2020Ncl, _fullRange ? 1u : 0u)
+            : (NvEnc.ColourPrimariesBt709, NvEnc.TransferCharacteristicBt709,
+               NvEnc.ColourMatrixSmpte170m, 0u);
+
         if (Codec == VideoCodec.Av1)
         {
             // The sequence header goes out with every key frame, so a client recovering from a loss
@@ -187,15 +195,10 @@ internal sealed unsafe class NvencEncoder : IVideoEncoder
             config.Av1OutputBitDepth = _hdr ? NvEnc.Av1BitDepth10 : NvEnc.Av1BitDepth8;
             config.Av1InputBitDepth = _hdr ? NvEnc.Av1BitDepth10 : NvEnc.Av1BitDepth8;
 
-            // What the picture is, said in the stream itself. Without it a client has ten-bit
-            // samples and no idea they are BT.2020 PQ, and shows them as washed-out Rec. 709.
-            if (_hdr)
-            {
-                config.Av1ColourPrimaries = NvEnc.ColourPrimariesBt2020;
-                config.Av1TransferCharacteristics = NvEnc.TransferCharacteristicSmpte2084;
-                config.Av1MatrixCoefficients = NvEnc.ColourMatrixBt2020Ncl;
-                config.Av1ColorRange = _fullRange ? 1u : 0u;
-            }
+            config.Av1ColourPrimaries = primaries;
+            config.Av1TransferCharacteristics = transfer;
+            config.Av1MatrixCoefficients = matrix;
+            config.Av1ColorRange = fullRange;
         }
         else if (Codec == VideoCodec.Hevc)
         {
@@ -209,23 +212,25 @@ internal sealed unsafe class NvencEncoder : IVideoEncoder
             config.HevcFlags = (config.HevcFlags & ~(7u << NvEnc.HevcBitDepthShift))
                                | ((_hdr ? 2u : 0u) << NvEnc.HevcBitDepthShift);
 
-            // What the picture is, said in the stream itself. Without it a client has ten-bit
-            // samples and no idea they are BT.2020 PQ, and shows them as washed-out Rec. 709.
-            if (_hdr)
-            {
-                config.HevcVideoSignalTypePresentFlag = 1;
-                config.HevcColourDescriptionPresentFlag = 1;
-                config.HevcVideoFullRangeFlag = _fullRange ? 1u : 0u;
-                config.HevcColourPrimaries = NvEnc.ColourPrimariesBt2020;
-                config.HevcTransferCharacteristics = NvEnc.TransferCharacteristicSmpte2084;
-                config.HevcColourMatrix = NvEnc.ColourMatrixBt2020Ncl;
-            }
+            config.HevcVideoSignalTypePresentFlag = 1;
+            config.HevcColourDescriptionPresentFlag = 1;
+            config.HevcVideoFullRangeFlag = fullRange;
+            config.HevcColourPrimaries = primaries;
+            config.HevcTransferCharacteristics = transfer;
+            config.HevcColourMatrix = matrix;
         }
         else
         {
             config.H264IdrPeriod = NvEnc.InfiniteGopLength;
             config.H264Flags |= NvEnc.H264FlagRepeatSpsPps;
             config.H264ChromaFormatIdc = _yuv444 ? 3u : 1u;   // 3 = 4:4:4, 1 = 4:2:0
+
+            config.H264VideoSignalTypePresentFlag = 1;
+            config.H264ColourDescriptionPresentFlag = 1;
+            config.H264VideoFullRangeFlag = fullRange;
+            config.H264ColourPrimaries = primaries;
+            config.H264TransferCharacteristics = transfer;
+            config.H264ColourMatrix = matrix;
         }
 
         var init = new NvEnc.InitializeParams

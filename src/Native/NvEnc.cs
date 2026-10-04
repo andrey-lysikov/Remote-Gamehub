@@ -196,6 +196,15 @@ internal static unsafe class NvEnc
         [FieldOffset(176)] internal uint H264IdrPeriod;
         [FieldOffset(360)] internal uint H264ChromaFormatIdc;
 
+        // h264VUIParameters, eighteen uints into the H264 config (after sliceModeData); the same
+        // struct as HEVC's below, which puts chromaFormatIDC exactly at 360 as above.
+        [FieldOffset(248)] internal uint H264VideoSignalTypePresentFlag;
+        [FieldOffset(256)] internal uint H264VideoFullRangeFlag;
+        [FieldOffset(260)] internal uint H264ColourDescriptionPresentFlag;
+        [FieldOffset(264)] internal uint H264ColourPrimaries;
+        [FieldOffset(268)] internal uint H264TransferCharacteristics;
+        [FieldOffset(272)] internal uint H264ColourMatrix;
+
         // HEVC bitfield word (at +16 inside the union, after level, tier and the two CU sizes), in
         // the header's order: repeatSPSPPS bit 7, chromaFormatIDC 9-10, pixelBitDepthMinus8 11-13.
         [FieldOffset(184)] internal uint HevcFlags;
@@ -235,6 +244,12 @@ internal static unsafe class NvEnc
     internal const uint ColourPrimariesBt2020 = 9;
     internal const uint TransferCharacteristicSmpte2084 = 16;
     internal const uint ColourMatrixBt2020Ncl = 9;
+
+    // What NVENC itself makes of RGB input: BT.601 matrix, studio range, whatever is asked — so
+    // FFmpeg signals exactly this for RGB, and so does this server. The desktop is Rec. 709/sRGB.
+    internal const uint ColourPrimariesBt709 = 1;
+    internal const uint TransferCharacteristicBt709 = 1;
+    internal const uint ColourMatrixSmpte170m = 6;
 
     internal const uint H264FlagRepeatSpsPps = 1u << 12;
     internal const uint HevcFlagRepeatSpsPps = 1u << 7;
