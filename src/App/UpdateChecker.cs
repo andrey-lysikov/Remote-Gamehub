@@ -23,7 +23,7 @@ internal sealed class UpdateChecker : IDisposable
 
     // The newest release, as JSON: only the tag is read from it.
     private const string LatestReleaseApi =
-        "https://api.github.com/repos/andrey-lysikov/remote-gamehub/releases/latest";
+        "https://api.github.com/repos/andrey-lysikov/Remote-Gamehub/releases/latest";
 
     // The same release as a page — what the notification and the page open.
     private const string LatestRelease = AppParameters.Links.Project + "/releases/latest";

@@ -32,7 +32,7 @@ internal static class AppParameters
     // Where the project lives: shown on the page and checked for newer releases (UpdateChecker).
     internal static class Links
     {
-        internal const string Project = "https://github.com/andrey-lysikov/remote-gamehub";
+        internal const string Project = "https://github.com/andrey-lysikov/Remote-Gamehub";
     }
 
     // The GameStream port layout Moonlight expects. The client is given one base port and derives

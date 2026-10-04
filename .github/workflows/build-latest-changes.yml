@@ -29,7 +29,7 @@ jobs:
           $sha = '${{ github.sha }}'.Substring(0, 7)
           "artifact=Remote-Gamehub-${{ github.ref_name }}-$sha" -replace '/', '-' >> $env:GITHUB_OUTPUT
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.name.outputs.artifact }}
           path: build/Remote-Gamehub.exe

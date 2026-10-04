@@ -30,7 +30,7 @@
 
     <Icon Id="AppIcon.ico" SourceFile="$(Icon)" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/andrey-lysikov/remote-gamehub" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/andrey-lysikov/Remote-Gamehub" />
     <Property Id="ARPNOREPAIR" Value="1" />
 
     <Property Id="ApplicationFolderName" Value="$(ProductName)" />
