@@ -253,7 +253,12 @@ internal sealed class DisplayAdaptation : IDisposable
         if (wanted.Width == current.Width && wanted.Height == current.Height &&
             wanted.RefreshHz == current.RefreshHz)
         {
-            Log.Info($"the screen is already {current}, which is what the client asked for");
+            // Nearest is not always equal: 170 fps asked of a screen that stops at 120 Hz.
+            var asked = current.Width == width && current.Height == height && current.RefreshHz + 1 >= fps;
+            Log.Info(asked
+                ? $"the screen is already {current}, which is what the client asked for"
+                : $"the screen is already {current}, the nearest it offers to the {width}x{height} " +
+                  $"at {fps} fps the client asked for");
             return null;
         }
 

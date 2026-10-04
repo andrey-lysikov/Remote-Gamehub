@@ -1057,6 +1057,28 @@ internal sealed class StreamSession : IDisposable
     // The screen's refresh rate as it is written. A rate that is not the frame rate is the whole
     // explanation of a picture that stutters at a rate the client and the encoder both agreed to.
     internal string ScreenHz => SentRefreshHz.ToString("0.##", CultureInfo.InvariantCulture);
+
+    // Whether the client has been told its frame rate is more than the screen gives. Once a stream.
+    private bool _fpsCapSaid;
+
+    // The frame rate really sent: never above the screen's, which composes no more. Encoding 170
+    // a second from 120 Hz spread the bitrate over fifty repeats of an unchanged frame.
+    private int SendFps(DesktopDuplicator duplicator)
+    {
+        var wanted = Math.Max(1, _negotiation.Fps);
+        var screen = (int)Math.Round(duplicator.RefreshRate);
+        if (screen <= 0 || screen >= wanted) return wanted;
+
+        if (!_fpsCapSaid)
+        {
+            _fpsCapSaid = true;
+            Log.Warn($"The client asked for {wanted} fps and this screen refreshes at {screen} Hz, so the\n" +
+                     $"stream carries {screen} frames a second: the picture cannot change faster than\n" +
+                     $"the screen. Set the client to {screen} fps, or give this machine a faster screen.");
+        }
+
+        return screen;
+    }
     private readonly Action<string> _ended;
     // Whether this game asked for a pointer of this server's drawing. See where it is used.
     private readonly bool _gamePointer;
@@ -1354,7 +1376,7 @@ internal sealed class StreamSession : IDisposable
 
                 encoder = VideoEncoders.Open(duplicator.Device, _capabilities, _negotiation.Codec,
                     duplicator.Width, duplicator.Height, _negotiation.BitrateKbps,
-                    _negotiation.Fps, tenBit, yuv444, _quality);
+                    SendFps(duplicator), tenBit, yuv444, _quality);
             }
             catch (Exception error) when (tenBit)
             {
@@ -1374,7 +1396,7 @@ internal sealed class StreamSession : IDisposable
 
                 encoder = VideoEncoders.Open(duplicator.Device, _capabilities, _negotiation.Codec,
                     duplicator.Width, duplicator.Height, _negotiation.BitrateKbps,
-                    _negotiation.Fps, hdr: false, yuv444: _negotiation.Yuv444, quality: _quality);
+                    SendFps(duplicator), hdr: false, yuv444: _negotiation.Yuv444, quality: _quality);
 
                 sentHdr = false;
             }
@@ -1402,7 +1424,7 @@ internal sealed class StreamSession : IDisposable
             // Whether the card, set to Always, has been said to stand over a waiting window. Once
             // per window, not per frame.
             var windowUnderCardSaid = false;
-            var frameInterval = TimeSpan.FromSeconds(1.0 / Math.Max(1, _negotiation.Fps));
+            var frameInterval = TimeSpan.FromSeconds(1.0 / SendFps(duplicator));
 
             // One interval ahead, so that the first turn of the loop waits for a picture rather
             // than sending the empty texture it starts with.
@@ -1569,9 +1591,10 @@ internal sealed class StreamSession : IDisposable
                         encoder.Dispose();
                         encoder = VideoEncoders.Open(duplicator.Device, _capabilities,
                             _negotiation.Codec, duplicator.Width, duplicator.Height,
-                            _negotiation.BitrateKbps, _negotiation.Fps,
+                            _negotiation.BitrateKbps, SendFps(duplicator),
                             hdr: converter is not null,
                             yuv444: converter is null && _negotiation.Yuv444, _quality);
+                        frameInterval = TimeSpan.FromSeconds(1.0 / SendFps(duplicator));
                         _keyFrameWanted = true;
 
                         continue;

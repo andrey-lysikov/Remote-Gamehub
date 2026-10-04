@@ -1,6 +1,7 @@
 //  Copyright © AndreyLysikov
 //  SPDX-License-Identifier: Apache-2.0
 
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
@@ -57,6 +58,12 @@ internal sealed class GameStreamServer : IAsyncDisposable
     private readonly SessionManager _sessions;
     private readonly AccessGuard _guard;
     private readonly CancellationTokenSource _stopping = new();
+
+    // What an open Moonlight asks every few seconds. Written once per client and path, and again
+    // only after a minute's quiet: otherwise forty lines a minute push the log's history out.
+    private static readonly string[] PolledPaths = { "/serverinfo", "/applist" };
+    private static readonly TimeSpan PollQuiet = TimeSpan.FromMinutes(1);
+    private readonly ConcurrentDictionary<string, DateTime> _lastPoll = new();
 
     private readonly List<TcpListener> _listeners = new();
     private readonly List<Task> _accepting = new();
@@ -152,6 +159,19 @@ internal sealed class GameStreamServer : IAsyncDisposable
         }
     }
 
+    // Whether this request is worth a line: anything but a poll, or a poll after a quiet minute.
+    private bool FirstOfPolling(string address, bool secure, string path)
+    {
+        if (!PolledPaths.Contains(path)) return true;
+
+        var now = DateTime.UtcNow;
+        var key = $"{address} {secure} {path}";
+        var previous = _lastPoll.TryGetValue(key, out var seen) ? seen : DateTime.MinValue;
+        _lastPoll[key] = now;
+
+        return now - previous > PollQuiet;
+    }
+
     private async Task ServeAsync(TcpClient client, bool secure)
     {
         var address = (client.Client.RemoteEndPoint as IPEndPoint)?.Address;
@@ -206,9 +226,12 @@ internal sealed class GameStreamServer : IAsyncDisposable
                         : Who(known, address));
                 }
 
-                Log.Info($"{peer} {(secure ? "https" : "http")} {request.Method} " +
-                         $"{request.Path}{request.QueryForLog}" +
-                         (known is null ? string.Empty : $"  [{known.Name}]"));
+                if (FirstOfPolling(plain, secure, request.Path))
+                {
+                    Log.Info($"{peer} {(secure ? "https" : "http")} {request.Method} " +
+                             $"{request.Path}{request.QueryForLog}" +
+                             (known is null ? string.Empty : $"  [{known.Name}]"));
+                }
 
 
                 // All but discovery and pairing is for admitted clients, and the certificate is the
