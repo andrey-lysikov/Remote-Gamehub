@@ -61,6 +61,7 @@ internal sealed unsafe class CursorPainter
     private int _windowsX;
     private int _windowsY;
     private bool _windowsVisible;
+    private bool _hiddenByProgram;
 
     private readonly Thread _watch;
     private volatile bool _watching = true;
@@ -147,9 +148,15 @@ internal sealed unsafe class CursorPainter
         var visible = (info.Flags & User32.CURSOR_SHOWING) != 0 &&
                       (info.Flags & User32.CURSOR_SUPPRESSED) == 0;
 
+        // Shown but with no shape: the program in front hid it with SetCursor(NULL), as a game that
+        // draws its own pointer does. Guessing an arrow here put a second pointer over the game's.
+        var hiddenByProgram = (info.Flags & User32.CURSOR_SHOWING) != 0 && info.Cursor == 0;
+
         // A hidden pointer has no shape: what it would have been is whatever the window under it
         // would show there.
-        var shape = info.Cursor != 0 ? info.Cursor : ShapeAt(info.ScreenPosition);
+        var shape = info.Cursor != 0 ? info.Cursor
+                  : hiddenByProgram ? 0
+                  : ShapeAt(info.ScreenPosition);
 
         var hotspotX = 0;
         var hotspotY = 0;
@@ -181,6 +188,7 @@ internal sealed unsafe class CursorPainter
             _windowsX = info.ScreenPosition.X;
             _windowsY = info.ScreenPosition.Y;
             _windowsVisible = visible;
+            _hiddenByProgram = hiddenByProgram;
         }
     }
 
@@ -263,6 +271,7 @@ internal sealed unsafe class CursorPainter
             // Nothing from the duplication: a machine with no mouse, where Windows draws no
             // pointer for it to report. What Windows knows, and the shape guessed from the window.
             bool windowsVisible;
+            bool hiddenByProgram;
 
             lock (_gate)
             {
@@ -272,6 +281,14 @@ internal sealed unsafe class CursorPainter
                 _drawHotspotX = _windowsHotspotX;
                 _drawHotspotY = _windowsHotspotY;
                 windowsVisible = _windowsVisible;
+                hiddenByProgram = _hiddenByProgram;
+            }
+
+            if (hiddenByProgram)
+            {
+                Silent("hidden by program", "the program in front hid the pointer, usually to draw " +
+                                            "its own");
+                return false;
             }
 
             if (!windowsVisible && !_noMouseHere)
