@@ -32,7 +32,7 @@ internal static unsafe class CaptureSelfTest
                     // copy, so the test has to ask for the same composition a stream does.
                     duplicator.DrawPointer();
 
-                    var path = Path.Combine(directory, AppParameters.Identity.FileBase + "-capture.png");
+                    var path = Path.Combine(directory, AppParameters.Identity.Name + "-capture.png");
                     Save(duplicator, path);
                     Log.Info($"capture test: one frame of {duplicator.Width}x{duplicator.Height} " +
                              $"written to {path}");

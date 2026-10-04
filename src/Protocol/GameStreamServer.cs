@@ -22,6 +22,31 @@ namespace RemoteGameHub.Protocol;
 // answering the same paths: a client pairs over plain HTTP, and everything after goes over TLS.
 internal sealed class GameStreamServer : IAsyncDisposable
 {
+    // The GameStream versions, as GeForce Experience reported them: Moonlight decides what a host
+    // can do from these, and withholds features otherwise.
+    private const string AppVersion = "7.1.431.-1";
+    private const string GfeVersion = "3.23.0.74";
+
+    // Clients read this to tell an idle host from one already streaming. What matters is the
+    // _SERVER_BUSY ending, which this is the absence of.
+    private const string StateFree = "SUNSHINE_SERVER_FREE";
+    private const string StateBusy = "SUNSHINE_SERVER_BUSY";
+
+    private const string DesktopAppTitle = "Desktop";
+
+    // The codec bits of ServerCodecModeSupport, from Limelight.h's SCM_ values.
+    private const int CodecH264 = 0x0001;
+    private const int CodecHevc = 0x0100;
+    private const int CodecHevcMain10 = 0x0200;
+    private const int CodecAv1Main8 = 0x0001_0000;
+    private const int CodecAv1Main10 = 0x0002_0000;
+    private const int CodecH264High8_444 = 0x0004_0000;
+    private const int CodecHevcRext8_444 = 0x0008_0000;
+
+    // What MaxLumaPixelsHEVC reports when HEVC is available: the number GeForce Experience
+    // reported and Sunshine therefore reports (nvhttp.cpp). Clients compare against it.
+    private const long MaxLumaPixelsHevc = 1869449984;
+
     private readonly AppConfig _config;
     private readonly HostIdentity _identity;
     private readonly DisplayOutput _output;
@@ -381,8 +406,8 @@ internal sealed class GameStreamServer : IAsyncDisposable
     private string ServerInfo(KnownClient? known, EndPoint? reachedAt) => BuildDocument(xml =>
     {
         xml.WriteElementString("hostname", _identity.HostName);
-        xml.WriteElementString("appversion", AppParameters.Protocol.AppVersion);
-        xml.WriteElementString("GfeVersion", AppParameters.Protocol.GfeVersion);
+        xml.WriteElementString("appversion", AppVersion);
+        xml.WriteElementString("GfeVersion", GfeVersion);
         xml.WriteElementString("uniqueid", _identity.UniqueId);
         xml.WriteElementString("HttpsPort", _config.HttpsPort.ToString());
         xml.WriteElementString("ExternalPort", _config.HttpPort.ToString());
@@ -393,21 +418,21 @@ internal sealed class GameStreamServer : IAsyncDisposable
 
         // From the startup probe: what the card's encoder actually opened. The H.264 bit stays on
         // whatever the probe said — clients treat it as the floor — and the launch still refuses.
-        var codecModes = AppParameters.Protocol.CodecH264
-                         | (_encoder.Hevc ? AppParameters.Protocol.CodecHevc : 0)
+        var codecModes = CodecH264
+                         | (_encoder.Hevc ? CodecHevc : 0)
                          // Ten-bit HEVC is what a client looks for before it will offer high
                          // dynamic range at all, so this bit is the whole of the offer.
-                         | (_encoder.Hdr ? AppParameters.Protocol.CodecHevcMain10 : 0)
-                         | (_encoder.Av1 ? AppParameters.Protocol.CodecAv1Main8 : 0)
-                         | (_encoder.Av1Hdr ? AppParameters.Protocol.CodecAv1Main10 : 0)
+                         | (_encoder.Hdr ? CodecHevcMain10 : 0)
+                         | (_encoder.Av1 ? CodecAv1Main8 : 0)
+                         | (_encoder.Av1Hdr ? CodecAv1Main10 : 0)
                          // Colour at full resolution, per codec: the client asks for it with
                          // chromaSamplingType and only when one of these said it could.
-                         | (_encoder.H264Yuv444 ? AppParameters.Protocol.CodecH264High8_444 : 0)
-                         | (_encoder.HevcYuv444 ? AppParameters.Protocol.CodecHevcRext8_444 : 0);
+                         | (_encoder.H264Yuv444 ? CodecH264High8_444 : 0)
+                         | (_encoder.HevcYuv444 ? CodecHevcRext8_444 : 0);
         xml.WriteElementString("ServerCodecModeSupport",
             codecModes.ToString(CultureInfo.InvariantCulture));
         xml.WriteElementString("MaxLumaPixelsHEVC",
-            (_encoder.Hevc ? AppParameters.Protocol.MaxLumaPixelsHevc : 0)
+            (_encoder.Hevc ? MaxLumaPixelsHevc : 0)
             .ToString(CultureInfo.InvariantCulture));
 
         // Answered from the certificate the client presented, so only ever 1 over TLS. Telling an
@@ -419,8 +444,8 @@ internal sealed class GameStreamServer : IAsyncDisposable
         var currentApp = _sessions.CurrentAppId;
         xml.WriteElementString("currentgame", currentApp.ToString(CultureInfo.InvariantCulture));
         xml.WriteElementString("state", currentApp == 0
-            ? AppParameters.Protocol.StateFree
-            : AppParameters.Protocol.StateBusy);
+            ? StateFree
+            : StateBusy);
 
         xml.WriteStartElement("SupportedDisplayMode");
         foreach (var (width, height, rate) in DisplayModes())
@@ -460,7 +485,7 @@ internal sealed class GameStreamServer : IAsyncDisposable
 
         // The desktop last, after the games: it always works whatever the scanners found, and the
         // games are what a person opened the client to look for.
-        WriteApp(xml, AppParameters.Protocol.DesktopAppId, AppParameters.Protocol.DesktopAppTitle);
+        WriteApp(xml, AppParameters.Protocol.DesktopAppId, DesktopAppTitle);
     });
 
     private void WriteApp(XmlWriter xml, long id, string title)

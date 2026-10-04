@@ -30,7 +30,7 @@ internal sealed class Autostart
     // Asks Task Scheduler whether the task is there and what it starts, and remembers both.
     internal void Refresh()
     {
-        var (code, output) = Run("/Query", "/TN", AppParameters.Identity.StartupTask, "/XML");
+        var (code, output) = Run("/Query", "/TN", AppParameters.Identity.Name, "/XML");
 
         _enabled = code == 0;
         _startsThisCopy = _enabled && StartsHere(output);
@@ -83,12 +83,12 @@ internal sealed class Autostart
 
         // Written beside the configuration, handed to schtasks, and deleted. schtasks reads
         // the file it is given and keeps its own copy; nothing of this needs to outlive the call.
-        var definition = Path.Combine(_directory, AppParameters.Identity.FileBase + "-task.xml");
+        var definition = Path.Combine(_directory, AppParameters.Identity.Name + "-task.xml");
         File.WriteAllText(definition, Definition(executable), new UnicodeEncoding(false, true));
 
         try
         {
-            var (code, output) = Run("/Create", "/TN", AppParameters.Identity.StartupTask,
+            var (code, output) = Run("/Create", "/TN", AppParameters.Identity.Name,
                                      "/XML", definition, "/F");
             if (code != 0)
                 throw new InvalidOperationException($"schtasks answered {code}: {output}");
@@ -106,7 +106,7 @@ internal sealed class Autostart
         }
 
         Log.Event((replacing
-                      ? $"the task \"{AppParameters.Identity.StartupTask}\" started another copy " +
+                      ? $"the task \"{AppParameters.Identity.Name}\" started another copy " +
                         "and has been rewritten: "
                       : "the server will start at sign-in: ") +
                   $"it runs {executable} with administrator rights");
@@ -114,7 +114,7 @@ internal sealed class Autostart
 
     private static void Remove()
     {
-        var (code, output) = Run("/Delete", "/TN", AppParameters.Identity.StartupTask, "/F");
+        var (code, output) = Run("/Delete", "/TN", AppParameters.Identity.Name, "/F");
         if (code != 0)
             throw new InvalidOperationException($"schtasks answered {code}: {output}");
 
@@ -138,7 +138,7 @@ internal sealed class Autostart
         var task = new XElement(ns + "Task", new XAttribute("version", "1.4"),
             new XElement(ns + "RegistrationInfo",
                 new XElement(ns + "Description",
-                    $"Starts {AppParameters.Identity.DisplayName} at sign-in, with administrator " +
+                    $"Starts {AppParameters.Identity.Name} at sign-in, with administrator " +
                     "rights. Switched from the tray menu.")),
             new XElement(ns + "Triggers",
                 new XElement(ns + "LogonTrigger",

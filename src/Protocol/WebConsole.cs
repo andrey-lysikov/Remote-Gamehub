@@ -75,7 +75,7 @@ internal sealed class WebConsole : IAsyncDisposable
             Log.Warn(
                 $"The page on port {_config.WebPort} could not be opened: {error.Message}\n" +
                 "Something else is probably using that port. Set [Network] WebPort to a free one —\n" +
-                $"for example {_config.PortBase + AppParameters.Ports.WebOffset} — and restart.\n" +
+                "for example 8080 — and restart.\n" +
                 "Everything else works; only the page is missing.");
             return;
         }
@@ -326,7 +326,7 @@ internal sealed class WebConsole : IAsyncDisposable
         if (request.Query("icon") is not null)
         {
             await using var icon = System.Reflection.Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("RemoteGameHub.Icons.RemoteGameHub.ico");
+                .GetManifestResourceStream($"RemoteGameHub.Icons.{AppParameters.Identity.Name}.ico");
 
             if (icon is null)
             {
@@ -654,7 +654,7 @@ internal sealed class WebConsole : IAsyncDisposable
         return WebAssets.Fill(WebAssets.Part("page"),
             ("lang", Text.Language),
             ("theme", ThemeName()),
-            ("name", AppParameters.Identity.DisplayName),
+            ("name", AppParameters.Identity.Name),
             ("version", Program.Version),
             ("project", AppParameters.Links.Project),
             ("style", WebAssets.Style),

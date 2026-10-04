@@ -62,8 +62,8 @@ public class ConfFormatTests
         var read = ConfFormat.Read(
             ConfFile.Parse("[Network]\nPortBase = 1\n[Games]\nDepth = 99\n"), warnings.Add);
 
-        Assert.Equal(AppParameters.Limits.MinPortBase, read.PortBase);
-        Assert.Equal(AppParameters.Limits.MaxGamesFolderDepth, read.GamesDepth);
+        Assert.Equal(ConfFormat.MinPortBase, read.PortBase);
+        Assert.Equal(ConfFormat.MaxGamesFolderDepth, read.GamesDepth);
         Assert.Equal(2, warnings.Count);
         Assert.Contains(warnings, w => w.Contains("PortBase"));
         Assert.Contains(warnings, w => w.Contains("Depth"));

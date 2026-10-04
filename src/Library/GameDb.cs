@@ -10,6 +10,15 @@ namespace RemoteGameHub.Library;
 // no key and no account. Held for one pass of the search — a bucket of names is up to a megabyte.
 internal sealed class GameDb
 {
+    // Names beginning with the same two letters, in one file each; then the game by number.
+    private const string Buckets = "https://app.lizardbyte.dev/GameDB/buckets/";
+    private const string Games = "https://app.lizardbyte.dev/GameDB/games/";
+
+    // A record names its cover at thumbnail size; the size is a segment of the address, and
+    // this one is 528x748 — the nearest above to the 600x900 a client draws.
+    private const string ThumbSize = "t_thumb";
+    private const string CoverSize = "t_cover_big_2x";
+
     // One name as a bucket lists it.
     private sealed record Entry(long Id, string Name);
 
@@ -101,7 +110,7 @@ internal sealed class GameDb
 
         try
         {
-            var address = $"{AppParameters.Artwork.GameDbBuckets}{Uri.EscapeDataString(bucket)}.json";
+            var address = $"{Buckets}{Uri.EscapeDataString(bucket)}.json";
 
             using var response = await _http.GetAsync(address, cancel);
             if (response.IsSuccessStatusCode)
@@ -138,7 +147,7 @@ internal sealed class GameDb
     {
         try
         {
-            var address = $"{AppParameters.Artwork.GameDbGames}{id}.json";
+            var address = $"{Games}{id}.json";
 
             using var response = await _http.GetAsync(address, cancel);
             if (!response.IsSuccessStatusCode) return null;
@@ -157,8 +166,8 @@ internal sealed class GameDb
 
             if (picture.StartsWith("//", StringComparison.Ordinal)) picture = "https:" + picture;
 
-            return picture.Replace(AppParameters.Artwork.GameDbThumbSize,
-                                   AppParameters.Artwork.GameDbCoverSize, StringComparison.Ordinal);
+            return picture.Replace(ThumbSize,
+                                   CoverSize, StringComparison.Ordinal);
         }
         catch (OperationCanceledException) when (cancel.IsCancellationRequested)
         {

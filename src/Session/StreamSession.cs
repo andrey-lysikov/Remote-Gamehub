@@ -526,7 +526,7 @@ internal sealed class SessionManager : IDisposable
     // Here at the launch, which a client allows the time to start a game, not at the strict ANNOUNCE.
     private DisplayOutput? WaitForScreen()
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(AppParameters.Handover.ScreenMs);
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(SessionWatch.ScreenMs);
 
         while (true)
         {
@@ -542,12 +542,12 @@ internal sealed class SessionManager : IDisposable
             if (DateTime.UtcNow >= deadline)
             {
                 Log.Warn("no screen appeared in the " +
-                         $"{AppParameters.Handover.ScreenMs / 1000} s after the console was taken " +
+                         $"{SessionWatch.ScreenMs / 1000} s after the console was taken " +
                          $"back ({reason}). The stream is likely to be refused for want of one.");
                 return null;
             }
 
-            Thread.Sleep(AppParameters.Handover.PollMs);
+            Thread.Sleep(SessionWatch.PollMs);
         }
     }
 
@@ -581,7 +581,7 @@ internal sealed class SessionManager : IDisposable
                 return output;
             }
 
-            if (attempt < attempts) Thread.Sleep(AppParameters.Capture.RecreateDelayMs);
+            if (attempt < attempts) Thread.Sleep(StreamSession.RecreateDelayMs);
         }
 
         Log.Warn($"the stream is refused: the screen this server captures is gone ({reason})" +
@@ -907,6 +907,18 @@ internal sealed class SessionManager : IDisposable
 // picture; the control channel and the two receive paths have their own.
 internal sealed class StreamSession : IDisposable
 {
+    // How long a single AcquireNextFrame may block. The desktop produces nothing while
+    // it is idle, and a capture loop that waits forever cannot notice a stop request.
+    private const int AcquireTimeoutMs = 100;
+
+    // Desktop Duplication is lost on a mode change, a resolution change, a full-screen
+    // transition and a session switch. It is not an error; the duplication is re-created.
+    internal const int RecreateDelayMs = 200;
+
+    // How long the desktop may be unavailable (a UAC prompt, the lock screen) before the stream
+    // ends. Generous: a client can answer the prompt, and walking to the machine takes a while.
+    private const int UnavailablePatienceMs = 10 * 60 * 1000;
+
     // RTP's clock for video, and the unit the timestamps are counted in. Ninety kilohertz is the
     // protocol's, not a choice.
     private const int RtpClockHz = 90000;
@@ -1148,8 +1160,8 @@ internal sealed class StreamSession : IDisposable
         _control = new ControlStream(config.ControlPort, config.BindAddress, request.RiKey);
         _input = new ClientInput(output.Bounds, gamepads);
 
-        _audio = AppParameters.Audio.Enabled && notice is null
-            ? new AudioStream(config.AudioPort, config.BindAddress, AppParameters.Audio.Device,
+        _audio = notice is null
+            ? new AudioStream(config.AudioPort, config.BindAddress,
                               negotiation, request.RiKey, request.RiKeyId)
             : null;
 
@@ -1159,7 +1171,7 @@ internal sealed class StreamSession : IDisposable
         _input.Pressed += () => _cardDismissed = true;
 
         _input.MotionWanted += (controller, motionType) =>
-            _control.SendMotionEventState(controller, motionType, AppParameters.Input.MotionReportHz);
+            _control.SendMotionEventState(controller, motionType, ClientInput.MotionReportHz);
         _control.IdrRequested += () =>
         {
             _keyFrameWanted = true;
@@ -1430,9 +1442,9 @@ internal sealed class StreamSession : IDisposable
                 }
 
                 if (now - unavailableSince <=
-                    TimeSpan.FromMilliseconds(AppParameters.Capture.UnavailablePatienceMs))
+                    TimeSpan.FromMilliseconds(UnavailablePatienceMs))
                 {
-                    Thread.Sleep(AppParameters.Capture.RecreateDelayMs);
+                    Thread.Sleep(RecreateDelayMs);
                     return true;
                 }
 
@@ -1484,7 +1496,7 @@ internal sealed class StreamSession : IDisposable
                     var untilFrame = nextFrame - clock.Elapsed;
                     var timeout = untilFrame <= TimeSpan.Zero
                         ? 0
-                        : (int)Math.Min(AppParameters.Capture.AcquireTimeoutMs,
+                        : (int)Math.Min(AcquireTimeoutMs,
                                         Math.Ceiling(untilFrame.TotalMilliseconds));
 
                     status = duplicator.TryCapture(timeout);
@@ -1522,7 +1534,7 @@ internal sealed class StreamSession : IDisposable
                             return;
                         }
 
-                        Thread.Sleep(AppParameters.Capture.RecreateDelayMs);
+                        Thread.Sleep(RecreateDelayMs);
                         continue;
                     }
                     else
@@ -1822,7 +1834,7 @@ internal sealed class StreamSession : IDisposable
 
         for (var attempt = 1; ; attempt++)
         {
-            Thread.Sleep(AppParameters.Capture.RecreateDelayMs);
+            Thread.Sleep(RecreateDelayMs);
 
             try
             {

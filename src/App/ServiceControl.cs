@@ -13,7 +13,7 @@ namespace RemoteGameHub.App;
 // the service control API rather than sc.exe, whose output is in the language of the machine.
 internal static class ServiceControl
 {
-    private const string Name = AppParameters.Identity.ServiceName;
+    private static readonly string Name = AppParameters.Identity.Name;
 
     // How long to wait for the service to reach the state that was asked for. Starting means
     // loading this same executable again; stopping means letting go of a worker.
@@ -180,7 +180,7 @@ internal static class ServiceControl
             {
                 foreach (var process in Process.GetProcessesByName(
                              Path.GetFileNameWithoutExtension(Environment.ProcessPath) ??
-                             AppParameters.Identity.FileBase))
+                             AppParameters.Identity.Name))
                 {
                     using (process)
                     {
@@ -297,7 +297,7 @@ internal static class ServiceControl
     {
         refusal = string.Empty;
 
-        var service = Advapi32.CreateService(manager, Name, AppParameters.Identity.DisplayName,
+        var service = Advapi32.CreateService(manager, Name, AppParameters.Identity.Name,
             Advapi32.SERVICE_QUERY_STATUS | Advapi32.SERVICE_START | Advapi32.SERVICE_STOP |
             Advapi32.SERVICE_CHANGE_CONFIG | Advapi32.SERVICE_QUERY_CONFIG,
             Advapi32.SERVICE_WIN32_OWN_PROCESS, Advapi32.SERVICE_DEMAND_START,
@@ -310,7 +310,7 @@ internal static class ServiceControl
         }
 
         Describe(service,
-            $"Runs {AppParameters.Identity.DisplayName} as SYSTEM on the console session, so that " +
+            $"Runs {AppParameters.Identity.Name} as SYSTEM on the console session, so that " +
             "a prompt for administrator rights, the sign-in screen and the lock screen can be " +
             "streamed and answered from a client. Started and stopped by the application itself.");
 

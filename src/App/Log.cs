@@ -28,6 +28,19 @@ internal enum LogLevel
 // reporting a problem sends this file, and it has to answer the question on its own.
 internal static unsafe class Log
 {
+    // Past this the log is rotated to <name>.log.1, pushing older numbers up.
+    private const long MaxBytes = 1024 * 1024;
+
+    // Kept as .log.1 through .log.<this>; whatever would become the next number is deleted
+    // instead.
+    private const int MaxRotations = 7;
+
+    // The size is re-checked every this many lines, not on every write.
+    private const int CheckEveryLines = 100;
+
+    // Continuation lines are indented to the width of "timestamp + tag ".
+    private const int ContinuationIndent = 30;
+
     private static readonly object Gate = new();
 
     private static string? _path;
@@ -44,7 +57,7 @@ internal static unsafe class Log
     // the application starts anyway.
     internal static void Start(string preferredDirectory, string fallbackDirectory, string version) =>
         Open(preferredDirectory, fallbackDirectory,
-             $"--- {AppParameters.Identity.DisplayName} {version} started ---");
+             $"--- {AppParameters.Identity.Name} {version} started ---");
 
     // Moves an open log to another folder without announcing a start: the service follows the
     // signed-in person from session to session, and note says why the lines continue elsewhere.
@@ -190,7 +203,7 @@ internal static unsafe class Log
                 // buffered log is an empty log.
                 Append(_path, text);
 
-                if (++_linesSinceSizeCheck >= AppParameters.Logging.CheckEveryLines)
+                if (++_linesSinceSizeCheck >= CheckEveryLines)
                 {
                     _linesSinceSizeCheck = 0;
                     Rotate(_path);
@@ -219,7 +232,7 @@ internal static unsafe class Log
             _ => "INFO ",
         };
 
-        var indent = new string(' ', AppParameters.Logging.ContinuationIndent);
+        var indent = new string(' ', ContinuationIndent);
         var lines = message.Replace("\r\n", "\n").Split('\n');
 
         var text = new StringBuilder();
@@ -239,12 +252,12 @@ internal static unsafe class Log
         try
         {
             var info = new FileInfo(path);
-            if (!info.Exists || info.Length < AppParameters.Logging.MaxBytes) return;
+            if (!info.Exists || info.Length < MaxBytes) return;
 
-            var oldest = $"{path}.{AppParameters.Logging.MaxRotations}";
+            var oldest = $"{path}.{MaxRotations}";
             File.Delete(oldest);
 
-            for (var number = AppParameters.Logging.MaxRotations - 1; number >= 1; number--)
+            for (var number = MaxRotations - 1; number >= 1; number--)
             {
                 var from = $"{path}.{number}";
                 if (File.Exists(from)) File.Move(from, $"{path}.{number + 1}");

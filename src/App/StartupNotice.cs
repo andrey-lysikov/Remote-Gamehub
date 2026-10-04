@@ -22,7 +22,7 @@ internal static class StartupNotice
             using var tray = new TrayIcon();
             tray.SetState("not started");
             tray.Notify(
-                Text.T("{0} did not start", AppParameters.Identity.DisplayName),
+                Text.T("{0} did not start", AppParameters.Identity.Name),
                 Log.Path is null
                     ? headline
                     : headline + "\n" + Text.T("The full reason is in {0}.", Log.Path),

@@ -5,9 +5,10 @@ $ErrorActionPreference = 'Stop'
 $repo    = $PSScriptRoot
 $source  = Join-Path $repo 'src'
 $tests   = Join-Path $repo 'test'
-$project = Join-Path $source 'RemoteGameHub.csproj'
+$project = Get-ChildItem $source -Filter '*.csproj' | Select-Object -First 1 -ExpandProperty FullName
+$name    = [IO.Path]::GetFileNameWithoutExtension($project)
 $output  = Join-Path $repo 'build'
-$exe     = Join-Path $output 'Remote-Gamehub.exe'
+$exe     = Join-Path $output "$name.exe"
 
 $projects  = @($source, $tests, (Join-Path $repo 'installer'))
 $leftovers = @()
@@ -44,8 +45,8 @@ function Remove-Leftovers {
     if ($kept) { Write-Kept "could not be removed: $($kept -join ', ')" }
 }
 
-if (-not (Test-Path $project)) {
-    throw "$project not found. This script belongs in the project root, next to the src folder."
+if (-not $project) {
+    throw "No .csproj in $source. This script belongs in the project root, next to the src folder."
 }
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {

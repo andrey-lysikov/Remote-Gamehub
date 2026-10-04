@@ -22,7 +22,7 @@ internal sealed class Database : IDisposable
 
     internal static Database Open(string directory)
     {
-        var path = System.IO.Path.Combine(directory, AppParameters.Identity.FileBase + ".db");
+        var path = System.IO.Path.Combine(directory, AppParameters.Identity.Name + ".db");
 
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {

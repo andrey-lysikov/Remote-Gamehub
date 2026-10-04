@@ -10,6 +10,10 @@ namespace RemoteGameHub.Library;
 // catalogue, then GameDB. Runs in the background after the listeners open, never at start.
 internal static class CoverArt
 {
+    // Steam's own search by title, and its pictures by app id.
+    private const string SteamSearch = "https://store.steampowered.com/api/storesearch/";
+    private const string SteamPictures = "https://cdn.cloudflare.steamstatic.com/steam/apps/";
+
     // How many of the catalogue's answers the picker is offered. Each one costs a request for the
     // record behind it, and a page of a hundred portraits is not a choice but a wall.
     private const int MostFromCatalogue = 8;
@@ -59,7 +63,7 @@ internal static class CoverArt
             // Some of Steam's front ends answer a request with no agent string with a redirect to
             // a page rather than the data.
             http.DefaultRequestHeaders.UserAgent.ParseAdd(
-                $"{AppParameters.Identity.FileBase}/{Program.Version}");
+                $"{AppParameters.Identity.Name}/{Program.Version}");
 
             // One catalogue for the whole pass: it keeps the lists it reads, and fifty titles
             // beginning with the same two letters are then one download rather than fifty.
@@ -108,11 +112,11 @@ internal static class CoverArt
 
         using var http = new HttpClient { Timeout = RequestTimeout };
         http.DefaultRequestHeaders.UserAgent.ParseAdd(
-            $"{AppParameters.Identity.FileBase}/{Program.Version}");
+            $"{AppParameters.Identity.Name}/{Program.Version}");
 
         try
         {
-            var address = $"{AppParameters.Artwork.SteamSearch}?term={Uri.EscapeDataString(title)}&cc=us&l=en";
+            var address = $"{SteamSearch}?term={Uri.EscapeDataString(title)}&cc=us&l=en";
 
             using var response = await http.GetAsync(address, cancel);
             if (!response.IsSuccessStatusCode)
@@ -135,7 +139,7 @@ internal static class CoverArt
                 var appId = id.GetInt64().ToString(System.Globalization.CultureInfo.InvariantCulture);
 
                 found.Add(new Candidate(name.GetString() ?? string.Empty,
-                                        $"{AppParameters.Artwork.SteamPictures}{appId}/library_600x900.jpg"));
+                                        $"{SteamPictures}{appId}/library_600x900.jpg"));
             }
         }
         catch (Exception error)
@@ -173,7 +177,7 @@ internal static class CoverArt
         {
             using var http = new HttpClient { Timeout = RequestTimeout };
             http.DefaultRequestHeaders.UserAgent.ParseAdd(
-                $"{AppParameters.Identity.FileBase}/{Program.Version}");
+                $"{AppParameters.Identity.Name}/{Program.Version}");
 
             using var response = await http.GetAsync(uri, cancel);
             if (!response.IsSuccessStatusCode)
@@ -311,7 +315,7 @@ internal static class CoverArt
         var wanted = Normalise(title);
         if (wanted.Length < ShortestSearchableTitle) return null;
 
-        var address = $"{AppParameters.Artwork.SteamSearch}?term={Uri.EscapeDataString(title)}&cc=us&l=en";
+        var address = $"{SteamSearch}?term={Uri.EscapeDataString(title)}&cc=us&l=en";
 
         using var response = await http.GetAsync(address, cancel);
         if (!response.IsSuccessStatusCode) return null;
@@ -367,7 +371,7 @@ internal static class CoverArt
     {
         foreach (var name in new[] { "library_600x900.jpg", "header.jpg" })
         {
-            using var response = await http.GetAsync($"{AppParameters.Artwork.SteamPictures}{appId}/{name}", cancel);
+            using var response = await http.GetAsync($"{SteamPictures}{appId}/{name}", cancel);
             if (!response.IsSuccessStatusCode) continue;
 
             var bytes = await response.Content.ReadAsByteArrayAsync(cancel);

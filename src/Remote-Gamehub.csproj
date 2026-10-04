@@ -8,14 +8,13 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <AssemblyName>Remote-Gamehub</AssemblyName>
     <RootNamespace>RemoteGameHub</RootNamespace>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
 
   </PropertyGroup>
 
   <PropertyGroup>
-    <Product>Remote Game Hub</Product>
+    <Product>$(MSBuildProjectName)</Product>
     <Company>lysnet.ru</Company>
     <Authors>Andrey.Lysikov and Claude</Authors>
     <Copyright>© Andrey Lysikov, Apache 2.0 licence.</Copyright>
@@ -25,7 +24,7 @@
 
   <PropertyGroup>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <IconFile>$(MSBuildThisFileDirectory)..\pictures\RemoteGameHub.ico</IconFile>
+    <IconFile>$(MSBuildThisFileDirectory)..\pictures\$(MSBuildProjectName).ico</IconFile>
     <ApplicationIcon>$(IconFile)</ApplicationIcon>
   </PropertyGroup>
 
@@ -54,7 +53,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="RemoteGameHub.Tests" />
+    <InternalsVisibleTo Include="$(MSBuildProjectName).Tests" />
   </ItemGroup>
 
   <ItemGroup>

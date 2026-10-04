@@ -9,11 +9,13 @@ $ErrorActionPreference = 'Stop'
 $wixDir  = $PSScriptRoot
 $repo    = Split-Path -Parent $PSScriptRoot
 $source  = Join-Path $repo 'src'
-$project = Join-Path $source 'RemoteGameHub.csproj'
+$project = Get-ChildItem $source -Filter '*.csproj' | Select-Object -First 1 -ExpandProperty FullName
+if (-not $project) { throw "No .csproj in $source." }
+$name    = [IO.Path]::GetFileNameWithoutExtension($project)
 $output  = Join-Path $repo 'build'
-$exe     = Join-Path $output 'Remote-Gamehub.exe'
+$exe     = Join-Path $output "$name.exe"
 
-$msi     = Join-Path $output 'Remote-Gamehub.msi'
+$msi     = Join-Path $output "$name.msi"
 
 $packageWxs   = Join-Path $wixDir 'Package.wxs'
 $shortcutsWxs = Join-Path $wixDir 'ShortcutsDlg.wxs'
@@ -101,8 +103,9 @@ try {
         -d "Version=$msiVersion" `
         -d "DisplayVersion=$Version" `
         -d "Manufacturer=$manufacturer" `
+        -d "ProductName=$name" `
         -d "Exe=$exe" `
-        -d "Icon=$(Join-Path $repo 'pictures\RemoteGameHub.ico')" `
+        -d "Icon=$(Join-Path $repo "pictures\$name.ico")" `
         -d "License=$(Join-Path $wixDir 'License.rtf')" `
         -ext WixToolset.UI.wixext `
         -ext WixToolset.Util.wixext `

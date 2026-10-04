@@ -10,9 +10,9 @@ namespace RemoteGameHub.App;
 // Windows never asks the user to allow it: without these, clients find it but cannot connect.
 internal static class FirewallRules
 {
-    private const string Group = AppParameters.Identity.DisplayName;
-    private const string TcpId = "RemoteGameHub-TCP";
-    private const string UdpId = "RemoteGameHub-UDP";
+    private static readonly string Group = AppParameters.Identity.Name;
+    private static readonly string TcpId = Group + "-TCP";
+    private static readonly string UdpId = Group + "-UDP";
 
     // What the rules have to open: the page, the three TCP listeners and the three stream ports.
     internal static (int[] Tcp, int[] Udp) Ports(AppConfig config) =>

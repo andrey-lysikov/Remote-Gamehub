@@ -16,7 +16,7 @@ internal sealed class HostIdentity
     // connection, not to prove anything on a local network.
     private const int ValidYears = 20;
 
-    private const string Subject = "CN=Remote Game Hub";
+    private static readonly string Subject = "CN=" + AppParameters.Identity.Name;
 
     internal X509Certificate2 Certificate { get; }
 
@@ -38,7 +38,7 @@ internal sealed class HostIdentity
 
     internal static HostIdentity Load(string directory, string configuredName)
     {
-        var path = Path.Combine(directory, AppParameters.Identity.FileBase + ".pem");
+        var path = Path.Combine(directory, AppParameters.Identity.Name + ".pem");
         var certificate = ReadOrCreate(path);
 
         var name = string.Equals(configuredName, "auto", StringComparison.OrdinalIgnoreCase)

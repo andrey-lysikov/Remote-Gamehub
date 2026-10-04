@@ -11,14 +11,31 @@ namespace RemoteGameHub.App;
 // after that. Nothing is downloaded — the answer is a version number and the page to get it from.
 internal sealed class UpdateChecker : IDisposable
 {
+    // The first check waits: at startup the network may not be up, and the server has a
+    // client to answer before it has anything to ask GitHub.
+    private static readonly TimeSpan FirstCheckDelay = TimeSpan.FromMinutes(5);
+
+    // Then once a day.
+    private static readonly TimeSpan CheckPeriod = TimeSpan.FromDays(1);
+
+    // How long one request may take. The answer is a nicety, not a reading.
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(10);
+
+    // The newest release, as JSON: only the tag is read from it.
+    private const string LatestReleaseApi =
+        "https://api.github.com/repos/andrey-lysikov/remote-gamehub/releases/latest";
+
+    // The same release as a page — what the notification and the page open.
+    private const string LatestRelease = AppParameters.Links.Project + "/releases/latest";
+
     // GitHub refuses a request without a User-Agent, and the header is also how the traffic is
     // recognised on their side.
-    private static readonly HttpClient Http = new() { Timeout = AppParameters.Updates.RequestTimeout };
+    private static readonly HttpClient Http = new() { Timeout = RequestTimeout };
 
     static UpdateChecker()
     {
         Http.DefaultRequestHeaders.UserAgent.Add(
-            new ProductInfoHeaderValue(AppParameters.Identity.FileBase, Program.Version));
+            new ProductInfoHeaderValue(AppParameters.Identity.Name, Program.Version));
 
         // Without it the API answers with whatever it feels like; this pins the shape of the JSON.
         Http.DefaultRequestHeaders.Accept.Add(
@@ -33,7 +50,7 @@ internal sealed class UpdateChecker : IDisposable
     internal string? Newer => _newer;
 
     // The page of that release, as GitHub named it; the fixed "latest" address until one is known.
-    internal string Link => _link ?? AppParameters.Links.LatestRelease;
+    internal string Link => _link ?? LatestRelease;
 
     // Raised once per newer version found — not at every daily check that finds the same one
     // again, because a balloon a day about the same release is nagging.
@@ -44,7 +61,7 @@ internal sealed class UpdateChecker : IDisposable
     {
         _ = Task.Run(async () =>
         {
-            var wait = AppParameters.Updates.FirstCheckDelay;
+            var wait = FirstCheckDelay;
 
             while (!_stopping.IsCancellationRequested)
             {
@@ -58,7 +75,7 @@ internal sealed class UpdateChecker : IDisposable
                 }
 
                 await CheckAsync();
-                wait = AppParameters.Updates.CheckPeriod;
+                wait = CheckPeriod;
             }
         });
     }
@@ -73,7 +90,7 @@ internal sealed class UpdateChecker : IDisposable
     {
         try
         {
-            using var answer = await Http.GetAsync(AppParameters.Links.LatestReleaseApi, _stopping.Token);
+            using var answer = await Http.GetAsync(LatestReleaseApi, _stopping.Token);
 
             // Nothing published yet: that is not a failure, it is "no updates".
             if (answer.StatusCode == HttpStatusCode.NotFound)
@@ -97,7 +114,7 @@ internal sealed class UpdateChecker : IDisposable
             if (page is not null &&
                 !page.StartsWith(AppParameters.Links.Project + "/", StringComparison.OrdinalIgnoreCase))
             {
-                Log.Warn($"update check: {AppParameters.Links.LatestReleaseApi} answered with a " +
+                Log.Warn($"update check: {LatestReleaseApi} answered with a " +
                          $"release of another project ({page}); it is ignored");
                 return Outcome.Failed;
             }

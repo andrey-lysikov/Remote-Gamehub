@@ -12,6 +12,16 @@ namespace RemoteGameHub.App;
 // desktop connection moves the session to the remote screen and draws it on the processor.
 internal sealed class SessionWatch : IDisposable
 {
+    // Taking the console back from remote desktop: how long the session is given to stop being a
+    // remote one after WTSConnectSession returns. The graphics behind it take longer (ScreenMs).
+    private const int SessionMs = 10 * 1000;
+
+    // How long a screen is then given to appear; a monitor waking to answer the card is slow.
+    internal const int ScreenMs = 20 * 1000;
+
+    // Between one look and the next while waiting for either of those.
+    internal const int PollMs = 250;
+
     private readonly object _gate = new();
     private bool _suspended;
     private bool _disposed;
@@ -117,10 +127,10 @@ internal sealed class SessionWatch : IDisposable
 
         // The call returns when the session has moved, but the metric behind IsRemoteSession
         // follows a moment later, and everything after this would be told "none" too early.
-        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(AppParameters.Handover.SessionMs);
+        var deadline = DateTime.UtcNow + TimeSpan.FromMilliseconds(SessionMs);
 
         while (PlatformGuard.IsRemoteSession && DateTime.UtcNow < deadline)
-            Thread.Sleep(AppParameters.Handover.PollMs);
+            Thread.Sleep(PollMs);
 
         Settle("the console was taken back");
         return !IsRemote;

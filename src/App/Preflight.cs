@@ -24,6 +24,11 @@ internal sealed record PreflightResult(
 // checks produce a server that starts, accepts a connection and only then finds nothing to send.
 internal static class Preflight
 {
+    // A third-party project, not ours: this server never fetches or installs it, only points
+    // the installer's own checkbox at it and looks for it once it is on the machine.
+    private const string VirtualDisplayDriver =
+        "https://github.com/VirtualDrivers/Virtual-Display-Driver/releases";
+
     internal static PreflightResult Run()
     {
         // Before the configuration is read, and therefore while everything is still being logged.
@@ -95,7 +100,7 @@ internal static class Preflight
             Log.Info(
                 "[General] VirtualDisplay is on, but no virtual display driver was found on this " +
                 "machine;\n    this stream uses an ordinary screen, as if the setting were off.\n" +
-                $"    What to do: install one from {AppParameters.Links.VirtualDisplayDriver}");
+                $"    What to do: install one from {VirtualDisplayDriver}");
         }
 
         var output = DisplayInventory.Select(inventory, config.Output, config.VirtualDisplay,

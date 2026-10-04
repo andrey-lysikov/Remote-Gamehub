@@ -35,7 +35,6 @@ internal sealed class AudioStream : IDisposable
 
     private readonly int _port;
     private readonly string _bindAddress;
-    private readonly string _wantedDevice;
     private readonly int _channels;
     private readonly uint _channelMask;
     private readonly bool _highQuality;
@@ -76,12 +75,11 @@ internal sealed class AudioStream : IDisposable
     private uint _blockBaseTimestamp;
     private int _blockShardSize;
 
-    internal AudioStream(int port, string bindAddress, string device,
+    internal AudioStream(int port, string bindAddress,
                          StreamNegotiation negotiation, byte[] riKey, uint riKeyId)
     {
         _port = port;
         _bindAddress = bindAddress;
-        _wantedDevice = device;
         _channels = negotiation.AudioChannels;
         _channelMask = (uint)negotiation.AudioChannelMask;
         _highQuality = negotiation.AudioHighQuality;
@@ -197,7 +195,7 @@ internal sealed class AudioStream : IDisposable
 
             while (_running)
             {
-                using var device = LoopbackDevice.Open(_wantedDevice, _channels, _channelMask);
+                using var device = LoopbackDevice.Open(_channels, _channelMask);
                 if (device is null)
                 {
                     // Nothing to capture from — no endpoint, or one that refused. The stream
@@ -518,7 +516,7 @@ internal sealed class AudioStream : IDisposable
         // small buffer drops samples when Windows schedules this thread late.
         private const long BufferDuration100Ns = 100 * 10_000;
 
-        // How often the default endpoint is re-checked while following it.
+        // How often the default endpoint is re-checked, to follow it when it changes.
         private const int DefaultDeviceCheckMs = 2000;
 
         private void* _enumerator;
@@ -530,7 +528,6 @@ internal sealed class AudioStream : IDisposable
         private int _channels;
         private bool _isFloat;
 
-        private readonly bool _followsDefault;
         private readonly string? _deviceId;
         private int _lastDefaultCheck;
 
@@ -547,16 +544,15 @@ internal sealed class AudioStream : IDisposable
         // the conversion, the endpoint's own count when it did not.
         internal int Channels => _channels;
 
-        private LoopbackDevice(bool followsDefault, string? deviceId)
+        private LoopbackDevice(string? deviceId)
         {
-            _followsDefault = followsDefault;
             _deviceId = deviceId;
             _lastDefaultCheck = Environment.TickCount;
         }
 
-        // Opens the endpoint named by [Audio] Device, or the default one. Returns null with the
-        // reason logged: a missing sound device is a stream without sound, not one that ends.
-        internal static LoopbackDevice? Open(string wanted, int channels, uint channelMask)
+        // Opens the default playback endpoint. Returns null with the reason logged: a missing sound
+        // device is a stream without sound, not one that ends.
+        internal static LoopbackDevice? Open(int channels, uint channelMask)
         {
             void* enumerator = null;
             void* device = null;
@@ -564,23 +560,16 @@ internal sealed class AudioStream : IDisposable
             try
             {
                 enumerator = Wasapi.CreateDeviceEnumerator();
-                var followsDefault = string.Equals(wanted, "auto", StringComparison.OrdinalIgnoreCase);
-
-                device = followsDefault
-                    ? AudioEndpoints.Default(enumerator)
-                    : AudioEndpoints.Find(enumerator, wanted);
+                device = AudioEndpoints.Default(enumerator);
 
                 if (device is null)
                 {
-                    Log.Warn(followsDefault
-                        ? "there is no default playback device; the stream will have no sound"
-                        : $"no playback device matches [Audio] Device = \"{wanted}\"; " +
-                          "the stream will have no sound");
+                    Log.Warn("there is no default playback device; the stream will have no sound");
                     return null;
                 }
 
                 var name = Wasapi.GetDeviceName(device) ?? "unnamed device";
-                var opened = new LoopbackDevice(followsDefault, Wasapi.GetDeviceId(device))
+                var opened = new LoopbackDevice(Wasapi.GetDeviceId(device))
                 {
                     _enumerator = enumerator,
                     _device = device,
@@ -602,8 +591,7 @@ internal sealed class AudioStream : IDisposable
                     return null;
                 }
 
-                Log.Info($"capturing the sound of \"{name}\"" +
-                         (followsDefault ? " (the default device)" : string.Empty));
+                Log.Info($"capturing the sound of \"{name}\" (the default device)");
 
                 return opened;
             }
@@ -752,7 +740,7 @@ internal sealed class AudioStream : IDisposable
         {
             samples = default;
 
-            if (_followsDefault && Environment.TickCount - _lastDefaultCheck > DefaultDeviceCheckMs)
+            if (Environment.TickCount - _lastDefaultCheck > DefaultDeviceCheckMs)
             {
                 _lastDefaultCheck = Environment.TickCount;
                 if (DefaultDeviceChanged())

@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\RemoteGameHub.csproj" />
+    <ProjectReference Include="..\src\Remote-Gamehub.csproj" />
   </ItemGroup>
 
 </Project>

@@ -115,7 +115,7 @@ internal sealed class AccessGuard
     private TimeSpan BlockFor(int blocks)
     {
         var minutes = (long)_config.BlockMinutes * Math.Max(1, blocks);
-        return TimeSpan.FromMinutes(Math.Min(minutes, AppParameters.Limits.MaxBlockMinutes));
+        return TimeSpan.FromMinutes(Math.Min(minutes, ConfFormat.MaxBlockMinutes));
     }
 
     // Whether this address is one this guard has anything to say about at all.

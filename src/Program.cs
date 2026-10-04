@@ -188,7 +188,7 @@ internal static class Program
                 single = new Mutex(initiallyOwned: true, AppParameters.Identity.Mutex, out var isOnly);
                 if (!isOnly)
                 {
-                    Log.Warn($"another copy of {AppParameters.Identity.DisplayName} is already " +
+                    Log.Warn($"another copy of {AppParameters.Identity.Name} is already " +
                              "running; this one is exiting.");
                     return 0;
                 }
@@ -196,7 +196,7 @@ internal static class Program
             catch (UnauthorizedAccessException)
             {
                 Log.Warn(
-                    $"Another copy of {AppParameters.Identity.DisplayName} is already running, as " +
+                    $"Another copy of {AppParameters.Identity.Name} is already running, as " +
                     "a more privileged account — the service's worker, which runs as SYSTEM. This " +
                     "one is exiting.\n" +
                     "There is nothing to do: the service already keeps a copy running, and it is " +
@@ -348,7 +348,7 @@ internal static class Program
         using var gamepads = GamepadHub.Open();
         if (!gamepads.IsAvailable)
         {
-            tray.Notify(AppParameters.Identity.DisplayName,
+            tray.Notify(AppParameters.Identity.Name,
                 Text.T("Controllers are unavailable: no controller bus driver is installed. " +
                        "Everything else works."), isError: false);
         }
@@ -379,7 +379,7 @@ internal static class Program
             // driver, and every launch answers with this reason instead of a timeout.
             Log.Warn("No encoder could be opened, so nothing can be streamed until this is fixed:\n" +
                      $"    {encoder.Refusal}");
-            tray.Notify(AppParameters.Identity.DisplayName,
+            tray.Notify(AppParameters.Identity.Name,
                 Text.T("The graphics card's encoder could not be opened; streaming is unavailable. " +
                        "The log has the details."), isError: true);
         }
@@ -437,7 +437,7 @@ internal static class Program
 
         // What each playback device mixes into, once: it is the answer to "why is there no
         // surround", and it changes only when a person changes it in Windows.
-        if (AppParameters.Audio.Enabled) AudioEndpoints.ListToLog();
+        AudioEndpoints.ListToLog();
 
         GameStreamServer? server = null;
         RtspServer? rtsp = null;
@@ -495,7 +495,7 @@ internal static class Program
         // Said once per version, in a balloon that opens the download page when clicked.
         using var updates = new UpdateChecker();
         updates.Found += newer => tray.Notify(
-            Text.T("{0} v{1} is available", AppParameters.Identity.DisplayName, newer),
+            Text.T("{0} v{1} is available", AppParameters.Identity.Name, newer),
             Text.T("This is v{0}. Click here to open the download page.", Program.Version),
             isError: false,
             onClick: () => Open(updates.Link));
@@ -510,7 +510,7 @@ internal static class Program
         // The four digits a pairing client shows are never sent over the protocol — both ends
         // derive their encryption key from them — so they are carried across by hand, per device.
         pairing.PairingStarted += name => tray.Notify(
-            AppParameters.Identity.DisplayName,
+            AppParameters.Identity.Name,
             Text.T("{0} is pairing. Open {1} and type the code it is showing.", name,
                    $"http://{Environment.MachineName}" +
             (config.WebPort == 80 ? string.Empty : $":{config.WebPort}") +

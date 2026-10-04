@@ -4,7 +4,7 @@
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
 
-  <Package Name="Remote Game Hub"
+  <Package Name="$(ProductName)"
            Manufacturer="$(Manufacturer)"
            Version="$(Version)"
            UpgradeCode="91DDC640-BBAE-4574-9FC1-A8389087E1EE"
@@ -14,7 +14,7 @@
     <MediaTemplate EmbedCab="yes" />
 
     <MajorUpgrade AllowSameVersionUpgrades="yes"
-                  DowngradeErrorMessage="A newer version of Remote Game Hub is already installed." />
+                  DowngradeErrorMessage="A newer version of $(ProductName) is already installed." />
 
     <Property Id="WINDOWSBUILDNUMBER">
       <RegistrySearch Id="WindowsBuildSearch"
@@ -26,57 +26,60 @@
     </Property>
 
     <Launch Condition="VersionNT64 AND WINDOWSBUILDNUMBER &gt;= 22000"
-            Message="Remote Game Hub needs 64-bit Windows 11 or newer. This machine does not meet that, and nothing has been installed." />
+            Message="$(ProductName) needs 64-bit Windows 11 or newer. This machine does not meet that, and nothing has been installed." />
 
     <Icon Id="AppIcon.ico" SourceFile="$(Icon)" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/andrey-lysikov/remote-gamehub" />
     <Property Id="ARPNOREPAIR" Value="1" />
 
-    <Property Id="ApplicationFolderName" Value="Remote-Gamehub" />
+    <Property Id="ApplicationFolderName" Value="$(ProductName)" />
     <Property Id="WixAppFolder" Value="WixPerUserFolder" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">
-      <Directory Id="APPLICATIONFOLDER" Name="Remote-Gamehub" />
+      <Directory Id="APPLICATIONFOLDER" Name="$(ProductName)" />
     </StandardDirectory>
 
     <StandardDirectory Id="ProgramMenuFolder" />
     <StandardDirectory Id="DesktopFolder" />
 
     <StandardDirectory Id="LocalAppDataFolder">
-      <Directory Id="CONFIGFOLDER" Name="Remote-Gamehub" />
+      <Directory Id="CONFIGFOLDER" Name="$(ProductName)" />
     </StandardDirectory>
 
     <SetProperty Id="WixPerUserFolder"
-                 Value="[LocalAppDataFolder]Remote-Gamehub"
+                 Value="[LocalAppDataFolder]$(ProductName)"
                  After="WixSetDefaultPerUserFolder"
                  Sequence="both" />
 
     <SetProperty Id="WixPerMachineFolder"
-                 Value="[ProgramFiles64Folder]Remote-Gamehub"
+                 Value="[ProgramFiles64Folder]$(ProductName)"
                  After="WixSetDefaultPerMachineFolder"
                  Sequence="both" />
 
     <Property Id="PERMACHINECOPY" Secure="yes">
-      <DirectorySearch Id="PerMachineFolderSearch" Path="[ProgramFiles64Folder]Remote-Gamehub">
-        <FileSearch Id="PerMachineExeSearch" Name="Remote-Gamehub.exe" />
+      <DirectorySearch Id="PerMachineFolderSearch" Path="[ProgramFiles64Folder]$(ProductName)">
+        <FileSearch Id="PerMachineExeSearch" Name="$(ProductName).exe" />
       </DirectorySearch>
     </Property>
 
     <Property Id="PERUSERCOPY" Secure="yes">
-      <DirectorySearch Id="PerUserFolderSearch" Path="[LocalAppDataFolder]Remote-Gamehub">
-        <FileSearch Id="PerUserExeSearch" Name="Remote-Gamehub.exe" />
+      <DirectorySearch Id="PerUserFolderSearch" Path="[LocalAppDataFolder]$(ProductName)">
+        <FileSearch Id="PerUserExeSearch" Name="$(ProductName).exe" />
       </DirectorySearch>
     </Property>
 
     <Property Id="SERVICEIMAGEPATH">
-      <RegistrySearch Id="ServiceImageSearch" Root="HKLM"
+      <RegistrySearch Id="LegacyServiceImageSearch" Root="HKLM"
                       Key="SYSTEM\CurrentControlSet\Services\RemoteGameHub" Name="ImagePath"
+                      Type="raw" Bitness="always64" />
+      <RegistrySearch Id="ServiceImageSearch" Root="HKLM"
+                      Key="SYSTEM\CurrentControlSet\Services\$(ProductName)" Name="ImagePath"
                       Type="raw" Bitness="always64" />
     </Property>
 
     <Property Id="VDDSETTING">
-      <RegistrySearch Id="VirtualDisplaySettingSearch" Root="HKCU" Key="Software\Remote-Gamehub"
+      <RegistrySearch Id="VirtualDisplaySettingSearch" Root="HKCU" Key="Software\$(ProductName)"
                       Name="VirtualDisplaySetting" Type="raw" />
     </Property>
 
@@ -118,26 +121,25 @@
                  After="ClearAllUsersForFirstInstall" Sequence="both"
                  Condition="WIX_UPGRADE_DETECTED AND INSTALLEDFOLDER" />
 
-    <?define ShortcutName = "Remote Game Hub" ?>
     <?define ShortcutNote = "Game and desktop streaming to Moonlight clients" ?>
 
     <ComponentGroup Id="AppFiles" Directory="APPLICATIONFOLDER">
       <Component Id="MainExe" Guid="F7D96560-E799-4DE3-ADDD-C7085743FF44">
-        <File Id="RemoteGameHubExe" Source="$(Exe)" Name="Remote-Gamehub.exe" KeyPath="yes" />
+        <File Id="RemoteGameHubExe" Source="$(Exe)" Name="$(ProductName).exe" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
     <ComponentGroup Id="StartMenuShortcutFiles" Directory="ProgramMenuFolder">
       <Component Id="StartMenuShortcut" Guid="7751937F-1686-474E-BBB6-701852521CDF">
         <Shortcut Id="StartMenuShortcutEntry"
-                  Name="$(ShortcutName)"
+                  Name="$(ProductName)"
                   Description="$(ShortcutNote)"
-                  Target="[APPLICATIONFOLDER]Remote-Gamehub.exe"
+                  Target="[APPLICATIONFOLDER]$(ProductName).exe"
                   WorkingDirectory="APPLICATIONFOLDER"
                   Icon="AppIcon.ico" />
 
         <RegistryValue Root="HKCU"
-                       Key="Software\Remote-Gamehub"
+                       Key="Software\$(ProductName)"
                        Name="StartMenuShortcut"
                        Type="integer"
                        Value="1"
@@ -148,14 +150,14 @@
     <ComponentGroup Id="DesktopShortcutFiles" Directory="DesktopFolder">
       <Component Id="DesktopShortcut" Guid="B5077057-1950-40B9-A649-FCFFD37BE524">
         <Shortcut Id="DesktopShortcutEntry"
-                  Name="$(ShortcutName)"
+                  Name="$(ProductName)"
                   Description="$(ShortcutNote)"
-                  Target="[APPLICATIONFOLDER]Remote-Gamehub.exe"
+                  Target="[APPLICATIONFOLDER]$(ProductName).exe"
                   WorkingDirectory="APPLICATIONFOLDER"
                   Icon="AppIcon.ico" />
 
         <RegistryValue Root="HKCU"
-                       Key="Software\Remote-Gamehub"
+                       Key="Software\$(ProductName)"
                        Name="DesktopShortcut"
                        Type="integer"
                        Value="1"
@@ -166,10 +168,10 @@
     <ComponentGroup Id="VirtualDisplayConfigFiles" Directory="CONFIGFOLDER">
       <Component Id="VirtualDisplayConfig" Guid="7FC65322-E599-43EA-A41B-55472499DA5C">
         <IniFile Id="SetVirtualDisplay" Action="addLine" Directory="CONFIGFOLDER"
-                 Name="Remote-Gamehub.conf" Section="General" Key="VirtualDisplay" Value="true" />
+                 Name="$(ProductName).conf" Section="General" Key="VirtualDisplay" Value="true" />
 
         <RegistryValue Root="HKCU"
-                       Key="Software\Remote-Gamehub"
+                       Key="Software\$(ProductName)"
                        Name="VirtualDisplaySetting"
                        Type="integer"
                        Value="1"
@@ -185,7 +187,7 @@
     <Property Id="INSTALLVDD" Value="0" />
 
     <Feature Id="Main"
-             Title="Remote Game Hub"
+             Title="$(ProductName)"
              Description="The server itself."
              Level="1"
              AllowAbsent="no"
@@ -220,7 +222,7 @@
                   Return="ignore" />
 
     <util:CloseApplication Id="CloseRunningServer"
-                           Target="Remote-Gamehub.exe"
+                           Target="$(ProductName).exe"
                            CloseMessage="yes"
                            ElevatedCloseMessage="yes"
                            TerminateProcess="0"
@@ -229,14 +231,14 @@
 
     <CustomAction Id="RemoveAutostartTask"
                   Directory="APPLICATIONFOLDER"
-                  ExeCommand="[System64Folder]schtasks.exe /delete /tn &quot;Remote Game Hub&quot; /f"
+                  ExeCommand="[System64Folder]schtasks.exe /delete /tn &quot;$(ProductName)&quot; /f"
                   Execute="deferred"
                   Impersonate="no"
                   Return="ignore" />
 
     <SetProperty Action="SetStopServer" Id="WixQuietExecCmdLine" Sequence="execute" Before="StopServer"
                  Condition="UPDATEMODE AND NOT REMOVE~=&quot;ALL&quot;"
-                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;Stop-Service -Name RemoteGameHub -ErrorAction SilentlyContinue; Wait-Process -Name Remote-Gamehub -Timeout 15 -ErrorAction SilentlyContinue; exit 0&quot;" />
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;Stop-Service -Name '$(ProductName)',RemoteGameHub -ErrorAction SilentlyContinue; Wait-Process -Name '$(ProductName)' -Timeout 15 -ErrorAction SilentlyContinue; exit 0&quot;" />
     <CustomAction Id="StopServer" DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="immediate" Return="ignore" />
 
@@ -246,10 +248,18 @@
     <CustomAction Id="StartServer" DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
                   Execute="deferred" Impersonate="no" Return="ignore" />
 
+    <SetProperty Id="RemoveLegacy" Sequence="execute" Before="RemoveLegacy"
+                 Condition="NOT REMOVE~=&quot;ALL&quot;"
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;Stop-Service -Name RemoteGameHub -ErrorAction SilentlyContinue; sc.exe delete RemoteGameHub | Out-Null; schtasks.exe /delete /tn 'Remote Game Hub' /f 2&gt;&amp;1 | Out-Null; Remove-NetFirewallRule -Name 'RemoteGameHub-TCP','RemoteGameHub-UDP' -ErrorAction SilentlyContinue; exit 0&quot;" />
+    <CustomAction Id="RemoveLegacy" DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
     <InstallExecuteSequence>
+      <Custom Action="RemoveLegacy" After="InstallFiles"
+              Condition="NOT REMOVE~=&quot;ALL&quot;" />
       <Custom Action="StopServer" Before="RemoveExistingProducts"
               Condition="UPDATEMODE AND NOT REMOVE~=&quot;ALL&quot;" />
-      <Custom Action="StartServer" After="InstallFiles"
+      <Custom Action="StartServer" After="RemoveLegacy"
               Condition="UPDATEMODE AND NOT REMOVE~=&quot;ALL&quot;" />
 
       <Custom Action="RemoveService" Before="RemoveFiles"

@@ -29,7 +29,7 @@ jobs:
         id: check
         shell: pwsh
         run: |
-          $csproj = 'src/RemoteGameHub.csproj'
+          $csproj = 'src/Remote-Gamehub.csproj'
           $version = ([xml](Get-Content $csproj)).Project.PropertyGroup.Version | Where-Object { $_ }
           if (-not $version) { throw "No <Version> in $csproj" }
           $version = "$version".Trim()

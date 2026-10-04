@@ -111,7 +111,7 @@ internal static class AutoLogon
 
         Log.Warn(Notice(check.Account));
 
-        tray.Notify(AppParameters.Identity.DisplayName,
+        tray.Notify(AppParameters.Identity.Name,
             Text.T("Your account has a password and Windows does not sign in by itself, so this host " +
                    "cannot be reached after a restart until somebody signs in at the machine. Click " +
                    "here for a way to change that."),
@@ -199,7 +199,7 @@ internal static class AutoLogon
             Inspect();
             Log.Event("automatic sign-in is on now; this host comes back on its own after a restart");
 
-            _tray?.Notify(AppParameters.Identity.DisplayName,
+            _tray?.Notify(AppParameters.Identity.Name,
                 Text.T("Automatic sign-in is on. This host will be reachable after a restart."),
                 isError: false);
             return;

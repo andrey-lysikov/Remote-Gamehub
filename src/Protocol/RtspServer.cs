@@ -56,6 +56,26 @@ internal sealed record StreamNegotiation(
 // SDP, PLAY. One TCP connection per request, read to the close; 7.1.431 and newer never use ENet.
 internal sealed class RtspServer : IAsyncDisposable
 {
+    // What a client may ask for and be given. Neither is a setting: the client knows what its
+    // screen and its network do, and these only keep a nonsensical request out of the encoder.
+    private const int MinBitrateKbps = 500;
+    private const int MaxBitrateKbps = 500_000;
+    private const int MinFps = 10;
+    private const int MaxFps = 240;
+
+    // x-ss-video[0].chromaSamplingType: the client's choice between quartered colour and all
+    // of it. Only ever 1 when GameStreamServer's codec bits said this server can send it.
+    private const int ChromaSampling444 = 1;
+
+    // What the client puts in x-nv-vqos[0].bitStreamFormat to name the codec it chose.
+    private const int BitStreamH264 = 0;
+    private const int BitStreamHevc = 1;
+    private const int BitStreamAv1 = 2;
+
+    // x-ss-general.featureFlags in DESCRIBE, Limelight.h's LI_FF_ values. Only controller
+    // touchpads: a client sends nothing it is not told the host takes.
+    private const int FeatureControllerTouch = 0x02;
+
     // One request with headers and payload fits far below this. Roomy, because the SDP grows a
     // line every time a client learns a new trick.
     private const int MaxRequestBytes = 8192;
@@ -360,7 +380,7 @@ internal sealed class RtspServer : IAsyncDisposable
         if (_encoder.Hevc) sdp.Append("sprop-parameter-sets=AAAAAU\n");
 
         // Without it the client keeps a pad's touchpad and motion sensors to itself.
-        sdp.Append($"a=x-ss-general.featureFlags:{AppParameters.Protocol.FeatureControllerTouch}\n");
+        sdp.Append($"a=x-ss-general.featureFlags:{FeatureControllerTouch}\n");
 
         // SS_ENC_CONTROL_V2 (bit 0x01): a client that sees it uses the 12-byte AES-GCM IV .NET can
         // decrypt, not the old 16-byte NVIDIA one. Video and audio encryption are not offered.
@@ -495,16 +515,16 @@ internal sealed class RtspServer : IAsyncDisposable
 
             var codec = videoFormat switch
             {
-                AppParameters.Protocol.BitStreamH264 => VideoCodec.H264,
-                AppParameters.Protocol.BitStreamHevc => VideoCodec.Hevc,
-                AppParameters.Protocol.BitStreamAv1 => VideoCodec.Av1,
+                BitStreamH264 => VideoCodec.H264,
+                BitStreamHevc => VideoCodec.Hevc,
+                BitStreamAv1 => VideoCodec.Av1,
                 _ => VideoCodec.Auto,   // Anything beyond: not offered, so never a valid ask
             };
 
             // Colour at full resolution, asked for only when /serverinfo offered it. Refused rather
             // than quietly downgraded: told 4:4:4 and shown 4:2:0 is the opposite of what it asked.
             var yuv444 = Value("x-ss-video[0].chromaSamplingType", 0) ==
-                         AppParameters.Protocol.ChromaSampling444;
+                         ChromaSampling444;
 
             if (yuv444 && !(codec == VideoCodec.H264 ? _encoder.H264Yuv444 : _encoder.HevcYuv444))
             {
@@ -529,9 +549,9 @@ internal sealed class RtspServer : IAsyncDisposable
                 ClientAddress: peer,
                 Width: width,
                 Height: height,
-                Fps: Math.Clamp(fps, AppParameters.Limits.MinFps, AppParameters.Limits.MaxFps),
-                BitrateKbps: Math.Clamp(bitrateKbps, AppParameters.Limits.MinBitrateKbps,
-                                        AppParameters.Limits.MaxBitrateKbps),
+                Fps: Math.Clamp(fps, MinFps, MaxFps),
+                BitrateKbps: Math.Clamp(bitrateKbps, MinBitrateKbps,
+                                        MaxBitrateKbps),
                 Codec: codec,
                 PacketSize: packetSize,
                 FecPercentage: fecPercentage,

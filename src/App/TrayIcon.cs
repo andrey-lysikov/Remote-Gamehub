@@ -33,7 +33,7 @@ internal sealed class TrayIcon : IDisposable
         _icon = new NotifyIcon
         {
             Icon = _drawing,
-            Text = $"{AppParameters.Identity.DisplayName} - v{Program.Version}",
+            Text = $"{AppParameters.Identity.Name} - v{Program.Version}",
             Visible = true,
         };
 

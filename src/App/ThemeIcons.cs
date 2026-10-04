@@ -33,7 +33,7 @@ internal static class ThemeIcons
     // 16-pixel slot, the shell scales it without smoothing and thin strokes come apart.
     internal static Icon Load()
     {
-        const string name = "RemoteGameHub.Icons.RemoteGameHub.ico";
+        var name = $"RemoteGameHub.Icons.{AppParameters.Identity.Name}.ico";
 
         using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(name)
             ?? throw new InvalidOperationException(

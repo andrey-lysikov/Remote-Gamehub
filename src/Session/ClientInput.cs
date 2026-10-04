@@ -35,6 +35,10 @@ internal sealed class ClientInput
     private const ushort ButtonTouchpad = 0x0010;
     private const ushort ButtonMisc = 0x0020;
 
+    // How often a pad's accelerometer and gyroscope report, as Sunshine asks: enough for
+    // aiming, and two hundred packets a second per pad on the control channel.
+    internal const ushort MotionReportHz = 100;
+
     // A scroll packet is this many bytes in all, which tells it from a controller.
     private const int ScrollPacketBytes = 14;
 
@@ -62,8 +66,6 @@ internal sealed class ClientInput
         0x5B, 0x5C, 0x5D,         // left and right Windows, menu
     };
 
-    private readonly bool _keyboard;
-    private readonly bool _mouse;
     private readonly bool _gamepad;
     private readonly GamepadHub _gamepads;
 
@@ -107,8 +109,6 @@ internal sealed class ClientInput
 
     internal ClientInput(Rect capturedScreen, GamepadHub gamepads)
     {
-        _keyboard = AppParameters.Input.Keyboard;
-        _mouse = AppParameters.Input.Mouse;
         // Not a setting: a controller bus that is installed is one somebody installed on purpose.
         _gamepad = gamepads.IsAvailable;
         _screen = capturedScreen;
@@ -238,7 +238,7 @@ internal sealed class ClientInput
 
     private void Key(ReadOnlySpan<byte> body, bool down)
     {
-        if (!_keyboard || body.Length < 6) return;
+        if (body.Length < 6) return;
 
         if (down) Pressed?.Invoke();
 
@@ -448,7 +448,7 @@ internal sealed class ClientInput
     // sends this. Each UTF-16 code unit goes in as its own event, which surrogate pairs need.
     private void Text(ReadOnlySpan<byte> body)
     {
-        if (!_keyboard || body.IsEmpty) return;
+        if (body.IsEmpty) return;
 
         var text = Encoding.UTF8.GetString(body).TrimEnd('\0');
         if (text.Length == 0) return;
@@ -478,7 +478,7 @@ internal sealed class ClientInput
     // rectangle and then to 0-65535 across the whole virtual desktop, not the primary screen.
     private void MoveAbsolute(ReadOnlySpan<byte> body)
     {
-        if (!_mouse || body.Length < 10) return;
+        if (body.Length < 10) return;
 
         var x = BinaryPrimitives.ReadInt16BigEndian(body);
         var y = BinaryPrimitives.ReadInt16BigEndian(body[2..]);
@@ -566,7 +566,7 @@ internal sealed class ClientInput
     // edge, which a clamped absolute move (tried once) capped at the edge instead.
     private void MoveRelative(ReadOnlySpan<byte> body)
     {
-        if (!_mouse || body.Length < 4) return;
+        if (body.Length < 4) return;
 
         Send(new InputRecord
         {
@@ -579,7 +579,7 @@ internal sealed class ClientInput
 
     private void Button(ReadOnlySpan<byte> body, bool down)
     {
-        if (!_mouse || body.IsEmpty) return;
+        if (body.IsEmpty) return;
 
         if (down) Pressed?.Invoke();
 
@@ -639,7 +639,7 @@ internal sealed class ClientInput
     // amount travels through untouched, which is what lets a trackpad send fractions of a notch.
     private void Scroll(ReadOnlySpan<byte> body)
     {
-        if (!_mouse || body.Length < 2) return;
+        if (body.Length < 2) return;
 
         Send(new InputRecord
         {
@@ -651,7 +651,7 @@ internal sealed class ClientInput
 
     private void HorizontalScroll(ReadOnlySpan<byte> body)
     {
-        if (!_mouse || body.Length < 2) return;
+        if (body.Length < 2) return;
 
         Send(new InputRecord
         {

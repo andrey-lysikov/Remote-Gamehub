@@ -7,6 +7,28 @@ namespace RemoteGameHub.App;
 // a default on AppConfig, a line in Read, a note and a line in Write, the same text in sample.conf.
 internal static class ConfFormat
 {
+    // Bounds for configured values. Out-of-range numbers are clamped and logged, never thrown:
+    // a typo in a port must not keep the server from starting.
+    internal const int MinPortBase = 1024;
+    internal const int MaxPortBase = 65000;
+
+    // The page's port may be one of the reserved ones — 80 is the point of it — which is why
+    // this range starts lower than the block above.
+    internal const int MinWebPort = 1;
+    internal const int MaxWebPort = 65535;
+
+    // Failed pairing attempts from one address outside this network before it is refused, and
+    // how long the refusal lasts. Zero attempts is the switch that turns the whole thing off.
+    internal const int MinBlockAfterFailures = 0;
+    internal const int MaxBlockAfterFailures = 100;
+    internal const int MinBlockMinutes = 1;
+    internal const int MaxBlockMinutes = 24 * 60;
+
+    // How deep the optional games folder may be walked. Past eight levels a mistyped path
+    // pointed at a drive root would turn the scan into a disk crawl.
+    internal const int MinGamesFolderDepth = 1;
+    internal const int MaxGamesFolderDepth = 8;
+
     internal static AppConfig Read(ConfFile file, Action<string> warn)
     {
         var config = new AppConfig();
@@ -18,17 +40,17 @@ internal static class ConfFormat
         config.Output = file.Text("Display", "Output", config.Output);
 
         config.PortBase = file.Number("Network", "PortBase", config.PortBase,
-            AppParameters.Limits.MinPortBase, AppParameters.Limits.MaxPortBase, warn);
+            MinPortBase, MaxPortBase, warn);
         config.BindAddress = file.Text("Network", "BindAddress", config.BindAddress);
         config.WebPort = file.Number("Network", "WebPort", config.WebPort,
-            AppParameters.Limits.MinWebPort, AppParameters.Limits.MaxWebPort, warn);
+            MinWebPort, MaxWebPort, warn);
         config.Upnp = file.Bool("Network", "Upnp", config.Upnp);
         config.Firewall = file.Bool("Network", "Firewall", config.Firewall);
         config.BlockAfterFailures = file.Number("Network", "BlockAfterFailures",
-            config.BlockAfterFailures, AppParameters.Limits.MinBlockAfterFailures,
-            AppParameters.Limits.MaxBlockAfterFailures, warn);
+            config.BlockAfterFailures, MinBlockAfterFailures,
+            MaxBlockAfterFailures, warn);
         config.BlockMinutes = file.Number("Network", "BlockMinutes", config.BlockMinutes,
-            AppParameters.Limits.MinBlockMinutes, AppParameters.Limits.MaxBlockMinutes, warn);
+            MinBlockMinutes, MaxBlockMinutes, warn);
 
         config.Steam = file.Bool("Games", "Steam", config.Steam);
         config.Xbox = file.Bool("Games", "Xbox", config.Xbox);
@@ -39,7 +61,7 @@ internal static class ConfFormat
 
         config.GamesFolders = file.List("Games", "Folders", config.GamesFolders);
         config.GamesDepth = file.Number("Games", "Depth", config.GamesDepth,
-            AppParameters.Limits.MinGamesFolderDepth, AppParameters.Limits.MaxGamesFolderDepth, warn);
+            MinGamesFolderDepth, MaxGamesFolderDepth, warn);
 
         return config;
     }

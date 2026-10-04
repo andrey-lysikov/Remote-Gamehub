@@ -60,7 +60,7 @@ internal static class ServiceHost
         {
             new ServiceTableEntry
             {
-                Name = Marshal.StringToHGlobalUni(AppParameters.Identity.ServiceName),
+                Name = Marshal.StringToHGlobalUni(AppParameters.Identity.Name),
                 Proc = Marshal.GetFunctionPointerForDelegate(_serviceMain),
             },
             new ServiceTableEntry { Name = 0, Proc = 0 },
@@ -83,7 +83,7 @@ internal static class ServiceHost
     {
         _handler = Handler;
         _statusHandle = Advapi32.RegisterServiceCtrlHandlerEx(
-            AppParameters.Identity.ServiceName,
+            AppParameters.Identity.Name,
             Marshal.GetFunctionPointerForDelegate(_handler), 0);
 
         if (_statusHandle == 0)

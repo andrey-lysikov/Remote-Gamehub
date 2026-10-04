@@ -402,7 +402,7 @@ internal sealed class PortForwarding : IAsyncDisposable
             $"<NewInternalPort>{port}</NewInternalPort>" +
             $"<NewInternalClient>{_localAddress}</NewInternalClient>" +
             "<NewEnabled>1</NewEnabled>" +
-            $"<NewPortMappingDescription>{AppParameters.Identity.DisplayName}</NewPortMappingDescription>" +
+            $"<NewPortMappingDescription>{AppParameters.Identity.Name}</NewPortMappingDescription>" +
             $"<NewLeaseDuration>{leaseSeconds}</NewLeaseDuration>" +
             "</u:AddPortMapping>";
 
