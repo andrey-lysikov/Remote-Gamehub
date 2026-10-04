@@ -27,6 +27,13 @@ internal sealed class ClientInput
     private const uint MagicUtf8Text = 0x17;
     private const uint MagicHorizontalScroll = 0x55000001;
     private const uint MagicControllerArrival = 0x55000004;
+    private const uint MagicControllerTouch = 0x55000005;
+    private const uint MagicControllerMotion = 0x55000006;
+
+    // buttonFlags2, the high half of Limelight.h's button flags: TOUCHPAD_FLAG and MISC_FLAG
+    // (Share, Mic, Capture), either of which clicks a DualShock 4's touchpad.
+    private const ushort ButtonTouchpad = 0x0010;
+    private const ushort ButtonMisc = 0x0020;
 
     // A scroll packet is this many bytes in all, which tells it from a controller.
     private const int ScrollPacketBytes = 14;
@@ -151,6 +158,10 @@ internal sealed class ClientInput
     // Which kinds of input packet have been seen this stream. See Handle.
     private readonly HashSet<uint> _firstSeen = new();
 
+    // Raised when a pad shown as a DualShock 4 arrives with motion sensors: the client keeps them
+    // off until asked. The controller number and LI_MOTION_TYPE_*.
+    internal event Action<byte, byte>? MotionWanted;
+
     // Raised when the client presses something — a key or a mouse button, never a movement: a
     // phone reports the finger sliding constantly, and only a press means "I want to see this".
     internal event Action? Pressed;
@@ -192,6 +203,8 @@ internal sealed class ClientInput
                 case MagicUtf8Text: Text(body); break;
                 case MagicMultiController: Controller(body); break;
                 case MagicControllerArrival: ControllerArrived(body); break;
+                case MagicControllerTouch: ControllerTouch(body); break;
+                case MagicControllerMotion: ControllerMotion(body); break;
 
                 // The one value that is two things: a generation-5 client scrolls with 0x0A where
                 // an older one meant a controller, and the two are told apart by length.
@@ -206,7 +219,7 @@ internal sealed class ClientInput
 
                 default:
                     // Once per kind, not per packet, and with the bytes so an unknown packet can be
-                    // named from the log: a pad's gyroscope sends an unhandled type at sensor rate.
+                    // named from the log: a pad's battery report, say, comes again and again.
                     if (firstOfItsKind)
                         Log.Input($"input type 0x{magic:X} ({payload.Length} bytes) is not handled: " +
                                   Convert.ToHexString(payload));
@@ -659,6 +672,7 @@ internal sealed class ClientInput
         var controllerNumber = BinaryPrimitives.ReadInt16LittleEndian(body[2..]);
         var activeMask = BinaryPrimitives.ReadUInt16LittleEndian(body[4..]);
         var buttons = BinaryPrimitives.ReadUInt16LittleEndian(body[8..]);
+        var buttons2 = BinaryPrimitives.ReadUInt16LittleEndian(body[22..]);
 
         _gamepads.SetActive(activeMask);
 
@@ -669,7 +683,33 @@ internal sealed class ClientInput
             LeftStickX: BinaryPrimitives.ReadInt16LittleEndian(body[12..]),
             LeftStickY: BinaryPrimitives.ReadInt16LittleEndian(body[14..]),
             RightStickX: BinaryPrimitives.ReadInt16LittleEndian(body[16..]),
-            RightStickY: BinaryPrimitives.ReadInt16LittleEndian(body[18..])));
+            RightStickY: BinaryPrimitives.ReadInt16LittleEndian(body[18..]),
+            TouchpadClick: (buttons2 & (ButtonTouchpad | ButtonMisc)) != 0));
+    }
+
+    // SS_CONTROLLER_TOUCH: one finger on the pad's touchpad, x and y from 0 to 1. Only the first
+    // touchpad: a DualShock 4 has one, and a Steam Controller's second has nowhere to go.
+    private void ControllerTouch(ReadOnlySpan<byte> body)
+    {
+        if (!_gamepad || body.Length < 20) return;
+        if (body[3] != 0) return;
+
+        _gamepads.Touch(body[0], body[1],
+            BinaryPrimitives.ReadUInt32LittleEndian(body[4..]),
+            BinaryPrimitives.ReadSingleLittleEndian(body[8..]),
+            BinaryPrimitives.ReadSingleLittleEndian(body[12..]));
+    }
+
+    // SS_CONTROLLER_MOTION: one reading of the accelerometer or the gyroscope, sent only after
+    // MotionWanted asked for it.
+    private void ControllerMotion(ReadOnlySpan<byte> body)
+    {
+        if (!_gamepad || body.Length < 16) return;
+
+        _gamepads.Motion(body[0], body[1],
+            BinaryPrimitives.ReadSingleLittleEndian(body[4..]),
+            BinaryPrimitives.ReadSingleLittleEndian(body[8..]),
+            BinaryPrimitives.ReadSingleLittleEndian(body[12..]));
     }
 
     // Sent once when the pad appears, before any state — so the kind recorded here is always
@@ -703,12 +743,19 @@ internal sealed class ClientInput
         if ((capabilities & 0x20) != 0) can.Add("a gyroscope");
         if ((capabilities & 0x40) != 0) can.Add("battery reporting");
         if ((capabilities & 0x80) != 0) can.Add("a colour light");
+        if ((capabilities & 0x100) != 0) can.Add("a second touchpad");
 
         Log.Info($"controller {number} is {kind}" +
                  (can.Count > 0 ? $" with {string.Join(", ", can)}" : " with nothing it reports") +
                  (isPlayStation
-                     ? ". It is presented to this machine as a DualShock 4 or DualSense pad."
-                     : ". It is presented to this machine as a wired Xbox pad."));
+                     ? ". It is presented to this machine as a DualShock 4 pad, touchpad and motion included."
+                     : ". It is presented to this machine as a wired Xbox pad, which has no touchpad " +
+                       "or motion sensors."));
+
+        // Only a DualShock 4 has somewhere to put the readings.
+        if (!isPlayStation) return;
+        if ((capabilities & 0x10) != 0) MotionWanted?.Invoke(number, DualShock4Report.MotionAccelerometer);
+        if ((capabilities & 0x20) != 0) MotionWanted?.Invoke(number, DualShock4Report.MotionGyroscope);
     }
 
     // ------------------------------------------------------------------ delivery

@@ -163,6 +163,10 @@ internal static class AppParameters
         internal const int BitStreamHevc = 1;
         internal const int BitStreamAv1 = 2;
 
+        // x-ss-general.featureFlags in DESCRIBE, Limelight.h's LI_FF_ values. Only controller
+        // touchpads: a client sends nothing it is not told the host takes.
+        internal const int FeatureControllerTouch = 0x02;
+
         // What MaxLumaPixelsHEVC reports when HEVC is available: the number GeForce Experience
         // reported and Sunshine therefore reports (nvhttp.cpp). Clients compare against it.
         internal const long MaxLumaPixelsHevc = 1869449984;
@@ -214,6 +218,10 @@ internal static class AppParameters
     {
         internal const bool Keyboard = true;
         internal const bool Mouse = true;
+
+        // How often a pad's accelerometer and gyroscope report, as Sunshine asks: enough for
+        // aiming, and two hundred packets a second per pad on the control channel.
+        internal const ushort MotionReportHz = 100;
     }
 
     internal static class Capture

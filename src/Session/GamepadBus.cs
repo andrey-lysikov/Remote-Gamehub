@@ -1,6 +1,7 @@
 //  Copyright © AndreyLysikov
 //  SPDX-License-Identifier: Apache-2.0
 
+using System.Diagnostics;
 using RemoteGameHub.App;
 
 namespace RemoteGameHub.Session;
@@ -22,6 +23,11 @@ internal interface IGamepadTarget : IDisposable
     // Blocks until the guest sets the rumble motors or the player light, or the timeout passes;
     // false either way, GamepadHub only reads the out parameters when this returns true.
     bool WaitForFeedback(int timeoutMs, out byte largeMotor, out byte smallMotor, out byte ledNumber);
+
+    // The pad's own touchpad and motion sensors; an Xbox pad has neither and ignores both.
+    void Touch(byte eventType, uint pointerId, float x, float y) { }
+
+    void Motion(byte motionType, float x, float y, float z) { }
 }
 
 // Adapts the ViGEmBus client (ViGEmBus.cs) to the shape above: an Xbox 360 pad for most
@@ -86,17 +92,65 @@ internal sealed class ViGEmGamepadBus : IGamepadBus
     }
 
     // DS4 feedback rides IOCTL_DS4_REQUEST_NOTIFICATION behind a struct this server could not
-    // verify against any real header, so it is left unread.
+    // verify against any real header, so it is left unread; the feedback thread resends instead.
     private sealed class Ds4Target(ViGEmBus bus, uint serial) : IGamepadTarget
     {
-        public void Submit(in GamepadState state) => bus.SubmitDs4(serial, state.ToDs4Report());
+        // The report's timestamp wraps every 350 ms, and a game that integrates the gyroscope
+        // by it must see it move even while nothing else does (Sunshine resends as often).
+        private const int ResendMs = 100;
+
+        private readonly object _gate = new();
+        private readonly DualShock4Report _report = new(Stopwatch.GetTimestamp());
+        private long _sentAt;
+
+        public void Submit(in GamepadState state)
+        {
+            lock (_gate)
+            {
+                _report.SetInput(state);
+                Send();
+            }
+        }
+
+        public void Touch(byte eventType, uint pointerId, float x, float y)
+        {
+            lock (_gate)
+            {
+                if (_report.Touch(eventType, pointerId, x, y)) Send();
+            }
+        }
+
+        public void Motion(byte motionType, float x, float y, float z)
+        {
+            lock (_gate)
+            {
+                if (_report.Motion(motionType, x, y, z)) Send();
+            }
+        }
 
         public bool WaitForFeedback(int timeoutMs, out byte largeMotor, out byte smallMotor,
                                     out byte ledNumber)
         {
             largeMotor = smallMotor = ledNumber = 0;
-            Thread.Sleep(timeoutMs);
+
+            var end = Environment.TickCount64 + timeoutMs;
+            for (var now = Environment.TickCount64; now < end; now = Environment.TickCount64)
+            {
+                lock (_gate)
+                {
+                    if (now - _sentAt >= ResendMs) Send();
+                }
+
+                Thread.Sleep((int)Math.Min(ResendMs, end - now));
+            }
+
             return false;
+        }
+
+        private void Send()
+        {
+            bus.SubmitDs4(serial, _report.Stamped(Stopwatch.GetTimestamp()));
+            _sentAt = Environment.TickCount64;
         }
 
         public void Dispose() => bus.Unplug(serial);

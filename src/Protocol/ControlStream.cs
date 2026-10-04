@@ -34,6 +34,9 @@ internal sealed class ControlStream : IDisposable
     // back once a session too. Harmless, and understood well enough not to log.
     private const ushort TypeSetRgbLed = 0x5502;
 
+    // SS_SET_MOTION_EVENT: the client keeps a pad's motion sensors off until the host asks.
+    private const ushort TypeSetMotionEvent = 0x5501;
+
     // The protocol's "ended normally" reason code, which clients show as a clean end rather
     // than an error.
     private const uint TerminationGraceful = 0x80030023;
@@ -196,6 +199,18 @@ internal sealed class ControlStream : IDisposable
         BinaryPrimitives.WriteUInt16LittleEndian(payload[8..], highFrequency);
 
         Send(TypeRumble, payload);
+    }
+
+    // Asks the client to report one motion sensor of a pad (LI_MOTION_TYPE_*) this many times a
+    // second; zero turns it off. Layout from Sunshine's control_set_motion_event_t.
+    internal void SendMotionEventState(ushort controllerId, byte motionType, ushort reportRateHz)
+    {
+        Span<byte> payload = stackalloc byte[5];
+        BinaryPrimitives.WriteUInt16LittleEndian(payload, controllerId);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload[2..], reportRateHz);
+        payload[4] = motionType;
+
+        Send(TypeSetMotionEvent, payload);
     }
 
     // Says whether the stream is in high dynamic range, and what the screen it comes from can

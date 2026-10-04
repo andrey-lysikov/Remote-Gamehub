@@ -45,8 +45,8 @@ internal enum GamepadKind
     PlayStation,
 }
 
-// One controller, at one moment. Sticks are the full signed range and triggers are a byte, which
-// is what arrives from the client and what the pad reports — no scaling happens anywhere between.
+// One controller, at one moment: sticks and triggers exactly as the client sends them, unscaled.
+// TouchpadClick is the PlayStation clickpad (or Share/Mic), which only a DualShock 4 can show.
 internal readonly record struct GamepadState(
     GamepadButtons Buttons,
     byte LeftTrigger,
@@ -54,7 +54,8 @@ internal readonly record struct GamepadState(
     short LeftStickX,
     short LeftStickY,
     short RightStickX,
-    short RightStickY)
+    short RightStickY,
+    bool TouchpadClick = false)
 {
     internal static readonly GamepadState Released = new(GamepadButtons.None, 0, 0, 0, 0, 0, 0);
 
@@ -77,6 +78,8 @@ internal readonly record struct GamepadState(
     private const ushort Ds4Triangle = 1 << 7;
     private const ushort Ds4ShoulderLeft = 1 << 8;
     private const ushort Ds4ShoulderRight = 1 << 9;
+    private const ushort Ds4TriggerLeft = 1 << 10;
+    private const ushort Ds4TriggerRight = 1 << 11;
     private const ushort Ds4Share = 1 << 12;
     private const ushort Ds4Options = 1 << 13;
     private const ushort Ds4ThumbLeft = 1 << 14;
@@ -85,6 +88,10 @@ internal readonly record struct GamepadState(
     // DS4_BUTTON_DPAD_NONE = 0x8; the seven other nibble values are the compass points clockwise
     // from north.
     private const byte Ds4DpadNone = 0x8;
+
+    // DS4_SPECIAL_BUTTONS: the PS button and the touchpad's click.
+    private const byte Ds4SpecialPs = 1 << 0;
+    private const byte Ds4SpecialTouchpad = 1 << 1;
 
     internal ViGEmBus.Ds4Report ToDs4Report()
     {
@@ -101,6 +108,14 @@ internal readonly record struct GamepadState(
         if (Buttons.HasFlag(GamepadButtons.LeftStick)) buttons |= Ds4ThumbLeft;
         if (Buttons.HasFlag(GamepadButtons.RightStick)) buttons |= Ds4ThumbRight;
 
+        // A real pad sets L2/R2 as buttons too, as soon as the trigger moves; some games read only those.
+        if (LeftTrigger > 0) buttons |= Ds4TriggerLeft;
+        if (RightTrigger > 0) buttons |= Ds4TriggerRight;
+
+        byte special = 0;
+        if (Buttons.HasFlag(GamepadButtons.Guide)) special |= Ds4SpecialPs;
+        if (TouchpadClick) special |= Ds4SpecialTouchpad;
+
         return new ViGEmBus.Ds4Report
         {
             ThumbLX = ToAxisByte(LeftStickX),
@@ -108,6 +123,7 @@ internal readonly record struct GamepadState(
             ThumbRX = ToAxisByte(RightStickX),
             ThumbRY = (byte)(0xFF - ToAxisByte(RightStickY)),
             Buttons = buttons,
+            Special = special,
             TriggerL = LeftTrigger,
             TriggerR = RightTrigger,
         };

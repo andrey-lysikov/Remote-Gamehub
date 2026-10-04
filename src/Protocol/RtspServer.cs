@@ -359,6 +359,9 @@ internal sealed class RtspServer : IAsyncDisposable
 
         if (_encoder.Hevc) sdp.Append("sprop-parameter-sets=AAAAAU\n");
 
+        // Without it the client keeps a pad's touchpad and motion sensors to itself.
+        sdp.Append($"a=x-ss-general.featureFlags:{AppParameters.Protocol.FeatureControllerTouch}\n");
+
         // SS_ENC_CONTROL_V2 (bit 0x01): a client that sees it uses the 12-byte AES-GCM IV .NET can
         // decrypt, not the old 16-byte NVIDIA one. Video and audio encryption are not offered.
         sdp.Append("a=x-ss-general.encryptionSupported:1\n");

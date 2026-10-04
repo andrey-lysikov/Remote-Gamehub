@@ -97,10 +97,56 @@ internal sealed class GamepadHub : IDisposable
         }
         catch (Exception error)
         {
-            Log.Warn($"controller {index} stopped accepting reports ({error.Message}); " +
-                     "unplugging it. It will be plugged in again if the client reports it.");
-            Remove(index);
+            Refused(index, error);
         }
+    }
+
+    // A finger on the touchpad of a pad already plugged in. Never plugs one in itself: the state
+    // packet that does always comes first.
+    internal void Touch(int index, byte eventType, uint pointerId, float x, float y)
+    {
+        var target = PluggedTarget(index);
+        if (target is null) return;
+
+        try
+        {
+            target.Touch(eventType, pointerId, x, y);
+        }
+        catch (Exception error)
+        {
+            Refused(index, error);
+        }
+    }
+
+    // One motion sensor reading, for a pad already plugged in — see Touch.
+    internal void Motion(int index, byte motionType, float x, float y, float z)
+    {
+        var target = PluggedTarget(index);
+        if (target is null) return;
+
+        try
+        {
+            target.Motion(motionType, x, y, z);
+        }
+        catch (Exception error)
+        {
+            Refused(index, error);
+        }
+    }
+
+    private IGamepadTarget? PluggedTarget(int index)
+    {
+        if (_bus is null || _disposed) return null;
+        if (index < 0 || index >= _pads.Length) return null;
+
+        lock (_gate) return _pads[index]?.Target;
+    }
+
+    private void Refused(int index, Exception error)
+    {
+        Log.Warn($"controller {index} stopped accepting reports ({error.Message}); " +
+                 "unplugging it. It will be plugged in again if the client reports it.");
+        Remove(index);
     }
 
     // The controllers the client says it currently has, as a bit per index. Those missing from it

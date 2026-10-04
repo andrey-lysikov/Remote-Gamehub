@@ -82,4 +82,22 @@ public class GamepadStateTests
         Assert.Equal(12, report.TriggerL);
         Assert.Equal(34, report.TriggerR);
     }
+
+    [Fact]
+    public void Moving_a_trigger_also_presses_its_L2_or_R2_bit()
+    {
+        var report = new GamepadState(GamepadButtons.None, 1, 0, 0, 0, 0, 0).ToDs4Report();
+
+        Assert.Equal(1 << 10, report.Buttons & (1 << 10 | 1 << 11));
+    }
+
+    [Fact]
+    public void The_guide_button_is_PS_and_the_clickpad_is_the_touchpad_button()
+    {
+        var report = new GamepadState(GamepadButtons.Guide, 0, 0, 0, 0, 0, 0,
+                                      TouchpadClick: true).ToDs4Report();
+
+        // DS4_SPECIAL_BUTTON_PS = 1, DS4_SPECIAL_BUTTON_TOUCHPAD = 2.
+        Assert.Equal(0x03, report.Special);
+    }
 }

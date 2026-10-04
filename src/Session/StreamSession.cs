@@ -1157,6 +1157,9 @@ internal sealed class StreamSession : IDisposable
 
         // A deliberate press means the player wants to see the machine, whatever is loading.
         _input.Pressed += () => _cardDismissed = true;
+
+        _input.MotionWanted += (controller, motionType) =>
+            _control.SendMotionEventState(controller, motionType, AppParameters.Input.MotionReportHz);
         _control.IdrRequested += () =>
         {
             _keyFrameWanted = true;

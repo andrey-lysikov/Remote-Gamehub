@@ -78,12 +78,13 @@ internal sealed class ViGEmBus : IDisposable
         internal XusbReport Report;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct SubmitDs4Report
+    // DS4_SUBMIT_REPORT_EX, packed: the same IOCTL as the short report, told apart by Size.
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct SubmitDs4ReportEx
     {
         internal uint Size;
         internal uint SerialNo;
-        internal Ds4Report Report;
+        internal Ds4ReportEx Report;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -111,7 +112,7 @@ internal sealed class ViGEmBus : IDisposable
     }
 
     // ViGEm/Common.h's DS4_REPORT: unsigned 0-255 sticks centred on 0x80. Buttons packs an
-    // eight-way D-pad hat in its low nibble; Special (PS/touchpad-click) is left zero — unverified.
+    // eight-way D-pad hat in its low nibble. The leading fields of Ds4ReportEx, which is what is sent.
     [StructLayout(LayoutKind.Sequential)]
     internal struct Ds4Report
     {
@@ -123,6 +124,50 @@ internal sealed class ViGEmBus : IDisposable
         internal byte Special;
         internal byte TriggerL;
         internal byte TriggerR;
+    }
+
+    // ViGEm/Common.h's DS4_REPORT_EX: the whole 63-byte USB input report without its report ID,
+    // packed. Offsets from the header; the gaps are bytes ViGEm itself leaves unnamed.
+    [StructLayout(LayoutKind.Explicit, Size = 63)]
+    internal struct Ds4ReportEx
+    {
+        [FieldOffset(0)] internal byte ThumbLX;
+        [FieldOffset(1)] internal byte ThumbLY;
+        [FieldOffset(2)] internal byte ThumbRX;
+        [FieldOffset(3)] internal byte ThumbRY;
+        [FieldOffset(4)] internal ushort Buttons;
+        [FieldOffset(6)] internal byte Special;
+        [FieldOffset(7)] internal byte TriggerL;
+        [FieldOffset(8)] internal byte TriggerR;
+        [FieldOffset(9)] internal ushort Timestamp;
+        [FieldOffset(11)] internal byte BatteryLevel;
+        [FieldOffset(12)] internal short GyroX;
+        [FieldOffset(14)] internal short GyroY;
+        [FieldOffset(16)] internal short GyroZ;
+        [FieldOffset(18)] internal short AccelX;
+        [FieldOffset(20)] internal short AccelY;
+        [FieldOffset(22)] internal short AccelZ;
+        [FieldOffset(29)] internal byte BatteryLevelSpecial;
+        [FieldOffset(32)] internal byte TouchPacketCount;
+        [FieldOffset(33)] internal Ds4Touch CurrentTouch;
+        [FieldOffset(42)] internal Ds4Touch PreviousTouch1;
+        [FieldOffset(51)] internal Ds4Touch PreviousTouch2;
+    }
+
+    // DS4_TOUCH: two fingers. Each finger's first byte is bit 7 "up" plus a 7-bit tracking number;
+    // its three bytes are two 12-bit values, X low byte, X high nibble | Y low nibble << 4, Y high.
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    internal struct Ds4Touch
+    {
+        internal byte PacketCounter;
+        internal byte Finger1;
+        internal byte Finger1Data0;
+        internal byte Finger1Data1;
+        internal byte Finger1Data2;
+        internal byte Finger2;
+        internal byte Finger2Data0;
+        internal byte Finger2Data1;
+        internal byte Finger2Data2;
     }
 
     private readonly SafeFileHandle _bus;
@@ -339,16 +384,17 @@ internal sealed class ViGEmBus : IDisposable
         Kernel32.Control(_bus, IOCTL_XUSB_SUBMIT_REPORT, &request, sizeof(SubmitReport), null, 0, out _);
     }
 
-    internal unsafe void SubmitDs4(uint serial, in Ds4Report report)
+    // Always the full report: the short one has no touchpad, motion or timestamp.
+    internal unsafe void SubmitDs4(uint serial, in Ds4ReportEx report)
     {
-        var request = new SubmitDs4Report
+        var request = new SubmitDs4ReportEx
         {
-            Size = (uint)sizeof(SubmitDs4Report),
+            Size = (uint)sizeof(SubmitDs4ReportEx),
             SerialNo = serial,
             Report = report,
         };
 
-        Kernel32.Control(_bus, IOCTL_DS4_SUBMIT_REPORT, &request, sizeof(SubmitDs4Report), null, 0, out _);
+        Kernel32.Control(_bus, IOCTL_DS4_SUBMIT_REPORT, &request, sizeof(SubmitDs4ReportEx), null, 0, out _);
     }
 
     // Waits for the guest to set the rumble motors or the player light of one pad, and returns
