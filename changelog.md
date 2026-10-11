@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3
+
+* Status page fits a phone screen, and redisign graphics
+* Paired devices can be renamed on the status page, and can export/import
+* Some HDR and Surround audion fixes
+
 ## 2.2
 
 * Imrove support PlayStation controllers
