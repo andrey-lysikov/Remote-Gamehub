@@ -786,7 +786,7 @@ internal sealed class WebConsole : IAsyncDisposable
             : Text.T("waiting for a client");
     }
 
-    // What this machine is, on the heading's line: host name, encoder and games. Off or
+    // What this machine is, on the heading's line: host name and encoder. Off or
     // unavailable is left out, so the line is only what this machine can do right now.
     private string HostLine()
     {
@@ -809,8 +809,6 @@ internal sealed class WebConsole : IAsyncDisposable
             if (_encoder.AnyHdr) machine.Add(Chip(HdrIcon, "HDR"));
         }
 
-        var games = _games.Count();
-        machine.Add(Chip(GamesIcon, Text.T("{0} games", games), games.ToString(CultureInfo.InvariantCulture)));
 
         // Which controller bus is presenting the pads, left out entirely when there is none: a
         // client whose controller does nothing has one question, and an absent line answers it.
@@ -825,12 +823,13 @@ internal sealed class WebConsole : IAsyncDisposable
     private static string Chip(string icon, string title, string text = "", string kind = "") =>
         $"<span class=\"chip{kind}\" title=\"{title}\">{icon}{text}</span>";
 
-    // The header's update slot: the download link once a check has found a newer release, else
-    // the button that checks now. Kept off the host line, which scrolls and would clip it.
+    // The header's update slot, a mark after the version: the download link once a check has
+    // found a newer release, else the button that checks now and says what it found beside it.
     private string UpdateLink() => _updates.Newer is { } newer
-        ? $"<a class=update href=\"{Escape(_updates.Link)}\" target=_blank rel=noopener>" +
-          Text.T("version {0} is out — download", Escape(newer)) + "</a>"
-        : "<a href=\"#\" id=checkversion>" + Text.T("Has new version?") + "</a>";
+        ? $"<a class=update href=\"{Escape(_updates.Link)}\" target=_blank rel=noopener " +
+          $"title=\"{Text.T("version {0} is out — download", Escape(newer))}\">{DownloadIcon}{Escape(newer)}</a>"
+        : $"<a href=\"#\" id=checkversion title=\"{Text.T("Has new version?")}\" " +
+          $"aria-label=\"{Text.T("Has new version?")}\">{UpdateIcon}<span></span></a>";
 
     // The end of the log file, read while the server is still writing to it — hence the sharing
     // flags. Cut at the first line break, so the page never opens on half a line.
@@ -983,6 +982,10 @@ internal sealed class WebConsole : IAsyncDisposable
     private const string UploadIcon =
         "<svg viewBox=\"0 0 24 24\" aria-hidden=true><path d=\"M12 16V5M7 9l5-5 5 5M5 20h14\"/></svg>";
 
+    private const string UpdateIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><circle cx=12 cy=12 r=9 />" +
+        "<path d=\"M12 16V8M8.5 11.5L12 8l3.5 3.5\"/></svg>";
+
     private const string HostIcon =
         "<svg viewBox=\"0 0 24 24\" aria-hidden=true><rect x=3 y=4 width=18 height=12 rx=1.5 />" +
         "<path d=\"M8 20h8M12 16v4\"/></svg>";
@@ -994,11 +997,6 @@ internal sealed class WebConsole : IAsyncDisposable
     private const string HdrIcon =
         "<svg viewBox=\"0 0 24 24\" aria-hidden=true><circle cx=12 cy=12 r=4 />" +
         "<path d=\"M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1\"/></svg>";
-
-    private const string GamesIcon =
-        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><rect x=4 y=4 width=7 height=7 rx=1 />" +
-        "<rect x=13 y=4 width=7 height=7 rx=1 /><rect x=4 y=13 width=7 height=7 rx=1 />" +
-        "<rect x=13 y=13 width=7 height=7 rx=1 /></svg>";
 
     private const string GamepadIcon =
         "<svg viewBox=\"0 0 24 24\" aria-hidden=true><path d=\"M7 7h10a5 5 0 0 1 5 5v2.5a2.5 2.5 0 0 1-4.7 " +

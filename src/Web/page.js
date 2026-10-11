@@ -126,11 +126,13 @@ catch{scansaid.textContent='[[The host did not answer.]]';}});
 const update=$('update');
 update.addEventListener('click',async e=>{const link=e.target.closest('#checkversion');if(!link)return;e.preventDefault();
 if(link.dataset.busy)return;link.dataset.busy=update.dataset.busy='1';
-link.textContent='[[Checking…]]';
-try{link.textContent=await (await fetch('/?checkupdate=1')).text();}
-catch{link.textContent='[[Check failed]]';}
+const told=link.querySelector('span');link.classList.add('busy');
+told.textContent='[[Checking…]]';
+try{told.textContent=await (await fetch('/?checkupdate=1')).text();}
+catch{told.textContent='[[Check failed]]';}
+link.classList.remove('busy');
 delete update.dataset.busy;
-setTimeout(()=>{link.textContent='[[Has new version?]]';delete link.dataset.busy;},5000);});
+setTimeout(()=>{told.textContent='';delete link.dataset.busy;},5000);});
 function open(id,name,starts,from,level,cardOn,extra,noStream){editing=id;
 $('editortitle').textContent=id?'[[Edit game]]':'[[Add a game]]';
 title.value=name||'';command.value=starts||'';folder.value=from||'';args.value=extra||'';

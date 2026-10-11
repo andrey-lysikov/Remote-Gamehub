@@ -16,7 +16,6 @@ internal static class TextRu
         ["\"{0}\" is running on the host."] = "«{0}» работает на хосте.",
         ["{0} did not start"] = "{0} не запустился",
         ["{0} found — click the right one"] = "найдено: {0} — выберите нужную",
-        ["{0} games"] = "Игр: {0}",
         ["{0} is pairing. Open {1} and type the code it is showing."] = "{0} запрашивает сопряжение. Откройте {1} и введите показанный код.",
         ["{0} is running on the host"] = "{0} работает на хосте",
         ["{0} v{1} is available"] = "Доступна версия {0} v{1}",

@@ -25,14 +25,15 @@ align-items:center}
 header>div{min-width:0;flex:1}
 h1{font-size:1.05rem;margin:0;font-weight:600}
 .v{color:var(--faint);font-weight:400}
-.meta{font-size:12px;font-weight:400;color:var(--faint)}
-.meta a{color:var(--meta-link);text-decoration:none}
-.meta a:hover{color:var(--ink);text-decoration:underline}
-.titlerow{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:0 .6rem}
-.inforow{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem 1rem;margin-top:.35rem;
-color:var(--dim);font-size:13px}
-#host{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem .7rem}
-#status{min-width:0}
+h1 a{color:inherit;text-decoration:none}
+h1 a:hover{text-decoration:underline}
+.titlerow{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem .7rem}
+#update{display:inline-flex;align-items:center;font-size:12px;color:var(--faint)}
+#update a{display:inline-flex;align-items:center;gap:.3rem;color:var(--meta-link);text-decoration:none}
+#update a:hover{color:var(--ink)}
+#checkversion.busy svg{opacity:.4}
+#host{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem .7rem;color:var(--dim);font-size:13px}
+#status{margin-top:.35rem;color:var(--dim);font-size:13px}
 .chip{display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap;vertical-align:middle}
 #status span.live{color:var(--live)}
 #update a.update{color:var(--live);font-weight:600;text-decoration:none;
