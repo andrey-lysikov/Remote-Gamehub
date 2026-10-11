@@ -40,6 +40,10 @@ internal sealed class WebConsole : IAsyncDisposable
     // the scan exists. Takes the reason for the log line and returns at once.
     internal Action<string>? Rescan { get; set; }
 
+    // Starts the server again, for a restored certificate to be the one it answers with. Null
+    // when nothing would start it again: only the service brings a worker back.
+    internal Action? Restart { get; set; }
+
     internal WebConsole(AppConfig config, HostIdentity identity, PairingManager pairing,
                         ClientStore clients, AccessGuard guard, GameLibrary games,
                         SessionManager sessions, EncoderCapabilities encoder,
@@ -154,8 +158,7 @@ internal sealed class WebConsole : IAsyncDisposable
 
             // The name is the person's to choose and is kept as typed, within reason: a name is
             // one line, and the list it appears in has room for about this much of one.
-            var name = (request.Query("name") ?? string.Empty).Trim();
-            if (name.Length > 48) name = name[..48];
+            var name = DeviceName(request);
 
             var answer = !digits
                 ? Text.T("A code is four digits.")
@@ -473,6 +476,44 @@ internal sealed class WebConsole : IAsyncDisposable
             return;
         }
 
+        if (request.Query("rename") is { } renameId && long.TryParse(renameId, out var toRename))
+        {
+            var newName = DeviceName(request);
+            var renamed = newName.Length > 0 && _clients.Rename(toRename, newName);
+            await WriteAsync(stream, 200, "text/plain",
+                renamed ? Text.T("Renamed.") : Text.T("There is no such device."));
+            return;
+        }
+
+        // The paired devices with this host's certificate and key, as a file to keep.
+        if (request.Query("exportclients") is not null)
+        {
+            Log.Event("a backup of the paired devices and the host certificate was downloaded from the page");
+            await WriteFileAsync(stream, AppParameters.Identity.Name + "-devices.zip", "application/zip",
+                                 ClientBackup.Pack(_identity, _clients));
+            return;
+        }
+
+        // POST only, as the power buttons are: another page in the browser cannot send one here.
+        if (request.Query("importclients") is not null && request.Method == "POST")
+        {
+            var restored = ClientBackup.Restore(request.Body, _identity, _clients);
+            var restart = restored is { HostReplaced: true } ? Restart : null;
+
+            await WriteAsync(stream, 200, "text/plain", restored switch
+            {
+                null => Text.T("That file is not a backup of paired devices."),
+                { HostReplaced: false } same => Text.T("Devices added: {0}.", same.Added),
+                { } replaced when restart is not null => Text.T(
+                    "Devices added: {0}. The host certificate was restored; the server is restarting…", replaced.Added),
+                { } replaced => Text.T(
+                    "Devices added: {0}. The host certificate was restored; restart the server to use it.", replaced.Added),
+            });
+
+            restart?.Invoke();
+            return;
+        }
+
         if (request.Query("blocked") is not null)
         {
             await WriteAsync(stream, 200, "text/html; charset=utf-8", BlockedList());
@@ -491,6 +532,13 @@ internal sealed class WebConsole : IAsyncDisposable
         }
 
         await WriteAsync(stream, 200, "text/html; charset=utf-8", Page());
+    }
+
+    // A device's name as typed, within reason: one line, and the list has room for about this much.
+    private static string DeviceName(HttpRequest request)
+    {
+        var name = (request.Query("name") ?? string.Empty).Trim();
+        return name.Length > 48 ? name[..48] : name;
     }
 
     // The diagnostics tabs that have something to show, for the page to hide the rest.
@@ -594,7 +642,10 @@ internal sealed class WebConsole : IAsyncDisposable
 
         // The heading is part of the list rather than of the section around it, so that it comes
         // and goes with the rows when the page replaces them.
-        var html = new StringBuilder($"<h2>{Text.T("Paired devices")}</h2>");
+        var html = new StringBuilder(
+            $"<h2><span>{Text.T("Paired devices")}</span>" +
+            $"<button data-do=export title=\"{Text.T("Save a backup")}\">{DownloadIcon}</button>" +
+            $"<button data-do=import title=\"{Text.T("Restore from a backup")}\">{UploadIcon}</button></h2>");
         if (clients.Count == 0) html.Append($"<p class=q>{Text.T("No device has paired yet.")}</p>");
 
         var streamingTo = _sessions.Status is { Streaming: true } stream && IPAddress.TryParse(stream.Client, out var to)
@@ -615,6 +666,7 @@ internal sealed class WebConsole : IAsyncDisposable
                             client.LastSeenAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
                             client.PairedAt.LocalDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) +
                         $" · {client.Fingerprint[..8].ToLowerInvariant()}</span>");
+            html.Append($"<button data-do=rename title=\"{Text.T("Rename")}\">{PencilIcon}</button>");
             html.Append($"<button data-do=forget title=\"{Text.T("Forget")}\" class=danger>{TrashIcon}</button>");
             html.Append("</div>");
         }
@@ -724,12 +776,13 @@ internal sealed class WebConsole : IAsyncDisposable
 
         if (stream.Streaming)
         {
-            return "<span class=live>" + Text.T("Streaming to {0}", Escape(stream.ClientName ?? stream.Client)) +
-                   $"</span> <span class=dot>·</span> {stream.Detail}";
+            var client = Escape(stream.ClientName ?? stream.Client);
+            return Chip(CastIcon, Text.T("Streaming to {0}", client), client, " live") +
+                   $" <span class=dot>·</span> {stream.Detail}";
         }
 
         return _sessions.RunningProgram is { } program
-            ? "<span class=live>" + Text.T("Running {0}, without a stream", Escape(program)) + "</span>"
+            ? Chip(PlayIcon, Text.T("Running {0}, without a stream", Escape(program)), Escape(program), " live")
             : Text.T("waiting for a client");
     }
 
@@ -737,7 +790,7 @@ internal sealed class WebConsole : IAsyncDisposable
     // unavailable is left out, so the line is only what this machine can do right now.
     private string HostLine()
     {
-        var machine = new List<string> { Escape(_identity.HostName) };
+        var machine = new List<string> { Chip(HostIcon, Text.T("Host"), Escape(_identity.HostName)) };
 
         if (_encoder.Refusal is null)
         {
@@ -748,23 +801,29 @@ internal sealed class WebConsole : IAsyncDisposable
                 _encoder.Av1 ? "AV1" : null,
             }.Where(codec => codec is not null));
 
-            machine.Add($"{Escape(_encoder.Encoder.ToString())} {Escape(codecs)}");
+            var encoder = Escape(_encoder.Encoder.ToString());
+            machine.Add(Chip(EncoderIcon, $"{encoder} {Escape(codecs)}", encoder));
 
             // What the card can encode. Whether a stream really goes out in it depends on the
             // screen being in HDR at the time, which only a running stream knows; the log has why.
-            if (_encoder.AnyHdr) machine.Add("HDR");
+            if (_encoder.AnyHdr) machine.Add(Chip(HdrIcon, "HDR"));
         }
 
-        machine.Add(Text.T("{0} games", _games.Count()));
+        var games = _games.Count();
+        machine.Add(Chip(GamesIcon, Text.T("{0} games", games), games.ToString(CultureInfo.InvariantCulture)));
 
         // Which controller bus is presenting the pads, left out entirely when there is none: a
         // client whose controller does nothing has one question, and an absent line answers it.
-        if (_gamepads.IsAvailable) machine.Add(Escape(_gamepads.Driver));
+        if (_gamepads.IsAvailable) machine.Add(Chip(GamepadIcon, Escape(_gamepads.Driver)));
 
-        if (_config.Upnp) machine.Add("uPnP");
+        if (_config.Upnp) machine.Add(Chip(GlobeIcon, "uPnP"));
 
-        return string.Join(" <span class=dot>·</span> ", machine);
+        return string.Concat(machine);
     }
+
+    // One mark of the header with the words it stands for as its tooltip; both already escaped.
+    private static string Chip(string icon, string title, string text = "", string kind = "") =>
+        $"<span class=\"chip{kind}\" title=\"{title}\">{icon}{text}</span>";
 
     // The header's update slot: the download link once a check has found a newer release, else
     // the button that checks now. Kept off the host line, which scrolls and would clip it.
@@ -874,6 +933,22 @@ internal sealed class WebConsole : IAsyncDisposable
         await stream.FlushAsync(_stopping.Token);
     }
 
+    private async Task WriteFileAsync(Stream stream, string name, string contentType, byte[] content)
+    {
+        var head = Encoding.ASCII.GetBytes(
+            "HTTP/1.1 200 OK\r\n" +
+            $"Content-Type: {contentType}\r\n" +
+            $"Content-Disposition: attachment; filename=\"{name}\"\r\n" +
+            $"Content-Length: {content.Length}\r\n" +
+            "Cache-Control: no-store\r\n" +
+            "Connection: close\r\n" +
+            "\r\n");
+
+        await stream.WriteAsync(head, _stopping.Token);
+        await stream.WriteAsync(content, _stopping.Token);
+        await stream.FlushAsync(_stopping.Token);
+    }
+
     private static string Escape(string text) => WebUtility.HtmlEncode(text);
 
     // A string as a JSON literal, quotes included.
@@ -901,6 +976,42 @@ internal sealed class WebConsole : IAsyncDisposable
 
     private const string PlusIcon =
         "<svg viewBox=\"0 0 24 24\" class=big aria-hidden=true><path d=\"M12 5v14M5 12h14\"/></svg>";
+
+    private const string DownloadIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><path d=\"M12 4v11M7 11l5 5 5-5M5 20h14\"/></svg>";
+
+    private const string UploadIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><path d=\"M12 16V5M7 9l5-5 5 5M5 20h14\"/></svg>";
+
+    private const string HostIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><rect x=3 y=4 width=18 height=12 rx=1.5 />" +
+        "<path d=\"M8 20h8M12 16v4\"/></svg>";
+
+    private const string EncoderIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><rect x=7 y=7 width=10 height=10 rx=1.5 />" +
+        "<path d=\"M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4\"/></svg>";
+
+    private const string HdrIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><circle cx=12 cy=12 r=4 />" +
+        "<path d=\"M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9L7 7M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1\"/></svg>";
+
+    private const string GamesIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><rect x=4 y=4 width=7 height=7 rx=1 />" +
+        "<rect x=13 y=4 width=7 height=7 rx=1 /><rect x=4 y=13 width=7 height=7 rx=1 />" +
+        "<rect x=13 y=13 width=7 height=7 rx=1 /></svg>";
+
+    private const string GamepadIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><path d=\"M7 7h10a5 5 0 0 1 5 5v2.5a2.5 2.5 0 0 1-4.7 " +
+        "1.2L16 14H8l-1.3 1.7A2.5 2.5 0 0 1 2 14.5V12a5 5 0 0 1 5-5z\"/>" +
+        "<path d=\"M6.5 10.5h3M8 9v3M16.5 10.5h.01\"/></svg>";
+
+    private const string GlobeIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><circle cx=12 cy=12 r=9 />" +
+        "<path d=\"M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18\"/></svg>";
+
+    private const string CastIcon =
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><path d=\"M3 8V6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1h-7\"/>" +
+        "<path d=\"M3 12a7 7 0 0 1 7 7M3 16a3 3 0 0 1 3 3M3 19.5h.01\"/></svg>";
 
     // The stylesheet and script live in Web/page.css and Web/page.js, embedded and read through
     // WebAssets.

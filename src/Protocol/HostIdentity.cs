@@ -26,8 +26,11 @@ internal sealed class HostIdentity
     // The name shown in the client's list.
     internal string HostName { get; }
 
-    private HostIdentity(X509Certificate2 certificate, string hostName)
+    private readonly string _path;
+
+    private HostIdentity(X509Certificate2 certificate, string hostName, string path)
     {
+        _path = path;
         Certificate = certificate;
         HostName = hostName;
 
@@ -45,11 +48,41 @@ internal sealed class HostIdentity
             ? Environment.MachineName
             : configuredName;
 
-        var identity = new HostIdentity(certificate, name);
+        var identity = new HostIdentity(certificate, name, path);
         Log.Info($"host identity: \"{name}\", id {identity.UniqueId}, " +
                  $"certificate valid until {certificate.NotAfter:yyyy-MM-dd}");
 
         return identity;
+    }
+
+    // The certificate and its private key as the file holds them, for a backup. From the file:
+    // the key loaded for TLS is not one Windows lets out again.
+    internal string ReadPem() => File.ReadAllText(_path);
+
+    // Whether a backup's text is a certificate together with the key that belongs to it.
+    internal static bool IsUsable(string pem)
+    {
+        try
+        {
+            using var certificate = X509Certificate2.CreateFromPem(pem, pem);
+            return certificate.HasPrivateKey;
+        }
+        catch (Exception error) when (error is CryptographicException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    // Puts a backup's certificate on disk for the next start; false when it is already this one.
+    // The running server keeps the old one: every listener holds it.
+    internal bool Replace(string pem)
+    {
+        using var restored = X509Certificate2.CreateFromPem(pem, pem);
+        if (restored.RawData.AsSpan().SequenceEqual(Certificate.RawData)) return false;
+
+        File.WriteAllText(_path, pem);
+        Log.Event($"the host certificate at {_path} was replaced from a backup; it is used from the next start");
+        return true;
     }
 
     private static X509Certificate2 ReadOrCreate(string path)

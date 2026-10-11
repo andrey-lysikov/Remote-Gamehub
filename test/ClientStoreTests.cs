@@ -81,6 +81,24 @@ public class ClientStoreTests
     }
 
     [Fact]
+    public void Renaming_changes_the_name_and_keeps_the_certificate()
+    {
+        using var folder = new TestFolder();
+        using var database = Database.Open(folder.Path);
+        var clients = new ClientStore(database);
+
+        using var certificate = ClientCertificate();
+        clients.Admit("a", "Moonlight", certificate);
+
+        var id = clients.All().Single().Id;
+        Assert.True(clients.Rename(id, "Living-room TV"));
+        Assert.False(clients.Rename(id + 1, "Nobody"));
+
+        Assert.Equal("Living-room TV", clients.Find(certificate)!.Name);
+        Assert.Equal(1, clients.Count());
+    }
+
+    [Fact]
     public void A_device_not_seen_for_half_a_year_is_forgotten_at_startup()
     {
         using var folder = new TestFolder();

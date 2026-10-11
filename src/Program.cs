@@ -669,6 +669,17 @@ internal static class Program
             })
             : null;
 
+        // Leaving without stopping the service is a restart: it starts a worker again in seconds.
+        if (_isWorker)
+        {
+            console.Restart = () => loop.BeginInvoke(() =>
+            {
+                Log.Event("the worker is closing to start again with the restored host certificate");
+                askedToStop = true;
+                Application.Exit();
+            });
+        }
+
         Application.Run(new ApplicationContext());
 
         // The listeners are shut down before the tray icon goes, so a client reconnecting in those

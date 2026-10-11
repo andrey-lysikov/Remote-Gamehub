@@ -182,6 +182,98 @@ internal sealed class ClientStore
         return true;
     }
 
+    // Changes only what the list calls a client; the certificate it is recognised by stays.
+    internal bool Rename(long id, string name)
+    {
+        string? old = null;
+
+        lock (_database.Gate)
+        {
+            using (var select = _database.Command("SELECT name FROM clients WHERE id = $id;"))
+            {
+                select.Parameters.AddWithValue("$id", id);
+                old = select.ExecuteScalar() as string;
+            }
+
+            if (old is null) return false;
+
+            using var update = _database.Command("UPDATE clients SET name = $name WHERE id = $id;");
+            update.Parameters.AddWithValue("$name", name);
+            update.Parameters.AddWithValue("$id", id);
+            update.ExecuteNonQuery();
+        }
+
+        Log.Event($"\"{old}\" was renamed to \"{name}\" on the status page");
+        return true;
+    }
+
+    // One client as a backup carries it. No fingerprint: it is worked out from the certificate.
+    internal sealed record Saved(string UniqueId, string Name, string Certificate, string PairedAt);
+
+    internal IReadOnlyList<Saved> Export()
+    {
+        var saved = new List<Saved>();
+
+        lock (_database.Gate)
+        {
+            using var command = _database.Command(
+                "SELECT unique_id, name, certificate, paired_at FROM clients ORDER BY id;");
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                saved.Add(new Saved(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+        }
+
+        return saved;
+    }
+
+    // Adds the clients of a backup that are not known yet and returns how many. Seen now, or
+    // those of an old backup would be forgotten as stale at the very next start.
+    internal int Restore(IEnumerable<Saved> saved)
+    {
+        var now = Stamp(DateTimeOffset.UtcNow);
+        var added = 0;
+
+        foreach (var client in saved)
+        {
+            string fingerprint;
+            string pairedAt;
+
+            try
+            {
+                using var certificate = X509Certificate2.CreateFromPem(client.Certificate);
+                fingerprint = Fingerprint(certificate);
+                pairedAt = Stamp(Parse(client.PairedAt));
+            }
+            catch (Exception error) when (error is CryptographicException or FormatException)
+            {
+                Log.Warn($"\"{client.Name}\" in the backup was skipped: {error.Message}");
+                continue;
+            }
+
+            lock (_database.Gate)
+            {
+                using var insert = _database.Command(
+                    "INSERT OR IGNORE INTO clients (unique_id, name, certificate, fingerprint, paired_at, last_seen_at) " +
+                    "VALUES ($uniqueId, $name, $certificate, $fingerprint, $pairedAt, $now);");
+
+                insert.Parameters.AddWithValue("$uniqueId", client.UniqueId);
+                insert.Parameters.AddWithValue("$name", client.Name);
+                insert.Parameters.AddWithValue("$certificate", client.Certificate);
+                insert.Parameters.AddWithValue("$fingerprint", fingerprint);
+                insert.Parameters.AddWithValue("$pairedAt", pairedAt);
+                insert.Parameters.AddWithValue("$now", now);
+
+                if (insert.ExecuteNonQuery() == 0) continue;
+            }
+
+            added++;
+            Log.Event($"\"{client.Name}\" was restored from a backup; certificate {fingerprint[..16]}…");
+        }
+
+        return added;
+    }
+
     internal int Count()
     {
         lock (_database.Gate)
