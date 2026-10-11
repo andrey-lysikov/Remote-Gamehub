@@ -1550,6 +1550,22 @@ internal sealed class StreamSession : IDisposable
                 while (_running && status is CaptureStatus.Frame or CaptureStatus.Idle &&
                        clock.Elapsed < nextFrame);
 
+                // A screen at the stream's own rate hands each frame over about when it is due; one
+                // a moment late was skipped and the last sent twice, a judder. It is waited for.
+                if (_running && status == CaptureStatus.Idle && !deskChanged && card is null &&
+                    clock.Elapsed - lastChange < frameInterval * 2)
+                {
+                    status = duplicator.TryCapture((int)Math.Ceiling(frameInterval.TotalMilliseconds / 2));
+                    report.Captured(status, duplicator.LastAccumulatedFrames);
+
+                    if (status == CaptureStatus.Frame)
+                    {
+                        // The next is due one interval after this one came, not after it was due.
+                        deskChanged = true;
+                        nextFrame = clock.Elapsed;
+                    }
+                }
+
                 Step("the capture");
 
                 if (status == CaptureStatus.Lost)
@@ -1753,7 +1769,8 @@ internal sealed class StreamSession : IDisposable
                 frameIndex++;
                 _video.SendFrame(unit.Span, wantKeyFrame, frameIndex,
                     (uint)(now.TotalSeconds * RtpClockHz));
-                report.Sent(unit.Length, wantKeyFrame, card is not null);
+                report.Sent(unit.Length, wantKeyFrame, card is not null,
+                            again: card is null && !deskChanged);
                 Step("sending the frame");
 
                 // Once, after the first frame: whether the picture is high dynamic range is not
@@ -1933,7 +1950,7 @@ internal sealed class StreamSession : IDisposable
         private static readonly TimeSpan Every = TimeSpan.FromSeconds(10);
 
         private TimeSpan _since = clock.Elapsed;
-        private int _fresh, _idle, _unavailable, _sent, _keyFrames, _asked, _lost;
+        private int _fresh, _idle, _unavailable, _sent, _keyFrames, _asked, _lost, _again;
         private long _composed;
         private long _bytes;
         private bool _first = true;
@@ -1958,9 +1975,11 @@ internal sealed class StreamSession : IDisposable
 
         internal void PacketsLost(int count) => _lost += count;
 
-        internal void Sent(int bytes, bool keyFrame, bool card)
+        // again: the same picture as the frame before, because the desktop gave no new one in time.
+        internal void Sent(int bytes, bool keyFrame, bool card, bool again = false)
         {
             _sent++;
+            if (again) _again++;
             _bytes += bytes;
             if (keyFrame) _keyFrames++;
 
@@ -1977,6 +1996,7 @@ internal sealed class StreamSession : IDisposable
             var kbit = _bytes * 8 / Math.Max(1.0, elapsed.TotalSeconds) / 1000;
             Log.Info($"stream: {_sent} frames sent in {elapsed.TotalSeconds:0} s " +
                      $"({kbit.ToString("0", CultureInfo.InvariantCulture)} kbit/s, " +
+                     (_again > 0 ? $"{_again} of them the picture before again, " : string.Empty) +
                      $"{_keyFrames} key frame(s)" +
                      (_asked > _keyFrames ? $" of {_asked} asked for" : string.Empty) +
                      (_lost > 0 ? $", {_lost} packet(s) lost on the way" : string.Empty) +
@@ -1987,7 +2007,7 @@ internal sealed class StreamSession : IDisposable
                      (_unavailable > 0 ? $", unavailable {_unavailable} times" : string.Empty));
 
             _since = clock.Elapsed;
-            _fresh = _idle = _unavailable = _sent = _keyFrames = _asked = _lost = 0;
+            _fresh = _idle = _unavailable = _sent = _keyFrames = _asked = _lost = _again = 0;
             _composed = 0;
             _bytes = 0;
         }

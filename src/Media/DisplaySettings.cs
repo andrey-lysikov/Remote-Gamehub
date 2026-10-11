@@ -290,6 +290,8 @@ internal sealed class DisplayAdaptation : IDisposable
         var wanted = Choose(supported, width, height, fps);
         if (wanted is null) return null;
 
+        WarnIfUneven(supported, wanted, fps);
+
         if (wanted.Width == current.Width && wanted.Height == current.Height &&
             wanted.RefreshHz == current.RefreshHz)
         {
@@ -312,6 +314,24 @@ internal sealed class DisplayAdaptation : IDisposable
                  $"the screen was {current} and is now {wanted}, and will be put back afterwards");
 
         return current;
+    }
+
+    // A screen faster than the stream but no multiple of it gives its frames unevenly, which is
+    // seen as a judder and looks like a slow network. Said here, where the rate is chosen.
+    private static void WarnIfUneven(IReadOnlyList<DisplayMode> supported, DisplayMode chosen, int fps)
+    {
+        if (chosen.RefreshHz <= fps || RefreshRank(chosen.RefreshHz, fps) < 2) return;
+
+        var offered = string.Join("/", supported
+            .Where(m => m.Width == chosen.Width && m.Height == chosen.Height)
+            .Select(m => m.RefreshHz).Distinct().OrderDescending());
+
+        Log.Warn(
+            $"The client asked for {fps} fps, and at {chosen.Width}x{chosen.Height} this screen offers\n" +
+            $"{offered} Hz: neither {fps} Hz nor a multiple of it. {fps} frames taken out of {chosen.RefreshHz}\n" +
+            "skip some at regular intervals, and the picture judders however good the network is.\n" +
+            $"What to do: set the client to a rate this screen has (and the television to the same),\n" +
+            $"or add a custom {fps * 2} Hz mode for this screen in the graphics driver's settings.");
     }
 
     // A screen that has only just come back — the console handed over from remote desktop, a
