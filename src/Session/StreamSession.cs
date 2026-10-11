@@ -741,18 +741,23 @@ internal sealed class SessionManager : IDisposable
             Forget();
         }
 
+        if (session is not null)
+        {
+            Log.Event("the stream ended");
+            if (!session.IsNotice) _journal.Note(Text.T("stream to {0} ended", session.Negotiation.ClientAddress));
+
+            // Before the sound goes back: a capture still running follows it to the old device
+            // and warns about that device's channels, for a stream that is already over.
+            session.Dispose();
+        }
+
         audio?.Dispose();
 
         // Null here whenever Negotiated() ran: it took this over into the session, which puts the
         // screen back on its own. Left set only when a launch was abandoned before that happened.
         display?.Dispose();
 
-        if (session is null) return;
-
-        Log.Event("the stream ended");
-        if (!session.IsNotice) _journal.Note(Text.T("stream to {0} ended", session.Negotiation.ClientAddress));
-        session.Dispose();
-        _tray.SetState("waiting for a client");
+        if (session is not null) _tray.SetState("waiting for a client");
     }
 
     // Called by the session when it stops from the inside. The teardown goes to another thread:

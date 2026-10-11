@@ -641,7 +641,8 @@ internal sealed class DisplayAdaptation : IDisposable
                      $"({whole.ElapsedMilliseconds} ms)");
         }
 
-        if (whole.ElapsedMilliseconds > 500)
+        // An HDR switch alone is some 400 ms; a second is where a restore starts to be felt.
+        if (whole.ElapsedMilliseconds > 1000)
             Log.Warn($"restoring the screen took {whole.ElapsedMilliseconds} ms in total");
     }
 }
