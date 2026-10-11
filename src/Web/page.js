@@ -112,7 +112,7 @@ editorsaid.textContent=cover.blob?'[[uploading…]]':'[[fetching…]]';
 editorsaid.textContent=await sendCover(editing,cover);showStored();await reload();}
 async function reload(){games.innerHTML=await (await fetch('/?games=1')).text();}
 const scansaid=$('scansaid');
-$('rescan').addEventListener('click',async e=>{const b=e.target;b.disabled=true;
+$('rescan').addEventListener('click',async e=>{const b=e.currentTarget;b.disabled=true;
 scansaid.textContent=await (await fetch('/?rescan=1')).text();
 setTimeout(reload,2000);
 setTimeout(()=>{reload();scansaid.textContent='';b.disabled=false;},6000);});

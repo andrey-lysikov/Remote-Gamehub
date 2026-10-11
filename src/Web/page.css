@@ -33,6 +33,7 @@ h1 a:hover{text-decoration:underline}
 #update a:hover{color:var(--ink)}
 #checkversion.busy svg{opacity:.4}
 #host{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem .7rem;color:var(--dim);font-size:13px}
+@media (min-width:800px){#host{margin-left:auto;justify-content:flex-end}}
 #status{margin-top:.35rem;color:var(--dim);font-size:13px}
 .chip{display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap;vertical-align:middle}
 #status span.live{color:var(--live)}
@@ -206,6 +207,10 @@ border-left:1px solid var(--line)}
 #diagbar button.danger{color:var(--danger-line)}
 #diagbar button[hidden]{display:none}
 #diagbar button.on{background:var(--primary);border-color:var(--primary-line);color:var(--ink)}
+#diagbar button b{display:none;font-weight:400;font-size:12px;line-height:1.2;color:var(--dim)}
+#diagbar button.on b{color:var(--ink)}
+@media (min-width:800px){#diagbar button{display:inline-flex;align-items:center;gap:.35rem}
+#diagbar button b{display:inline}}
 #hosttools{margin-left:auto;display:flex;align-items:center;gap:.3rem}
 #hosttools .sep{width:1px;height:1.1rem;background:var(--line);margin:0 .3rem}
 #shot{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:.5rem}
@@ -228,10 +233,11 @@ cursor:default}
 #pane-screen.with-output #shot{flex-basis:40%;border-right:0;border-bottom:1px solid var(--line)}}
 html:has(dialog[open]){overflow:hidden}
 @media (max-width:40rem){
-dialog:not(#confirm){width:100vw;max-width:100vw;height:100vh;height:100dvh;max-height:none;margin:0;
-border:0;border-radius:0;overflow-y:auto;overscroll-behavior:contain;
+dialog:not(#confirm){width:100%;max-width:100%;height:100vh;height:100dvh;max-height:none;margin:0;
+border:0;border-radius:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;
 padding-bottom:calc(1.25rem + env(safe-area-inset-bottom,0px))}
 #editor form{display:flex;flex-direction:column;min-height:100%}
+#editor form>*{min-width:0;max-width:100%}
 #editor .row.end{margin-top:auto;padding-top:1rem}
 #editor .tab{min-height:0}
 }

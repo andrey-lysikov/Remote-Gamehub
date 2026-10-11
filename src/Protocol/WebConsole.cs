@@ -983,8 +983,8 @@ internal sealed class WebConsole : IAsyncDisposable
         "<svg viewBox=\"0 0 24 24\" aria-hidden=true><path d=\"M12 16V5M7 9l5-5 5 5M5 20h14\"/></svg>";
 
     private const string UpdateIcon =
-        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><circle cx=12 cy=12 r=9 />" +
-        "<path d=\"M12 16V8M8.5 11.5L12 8l3.5 3.5\"/></svg>";
+        "<svg viewBox=\"0 0 24 24\" aria-hidden=true><path d=\"M20 12a8 8 0 1 1-2.3-5.6\"/>" +
+        "<path d=\"M20 4v5h-5\"/></svg>";
 
     private const string HostIcon =
         "<svg viewBox=\"0 0 24 24\" aria-hidden=true><rect x=3 y=4 width=18 height=12 rx=1.5 />" +
