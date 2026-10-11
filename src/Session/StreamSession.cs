@@ -1093,7 +1093,8 @@ internal sealed class StreamSession : IDisposable
             if (colour is { } wanted)
             {
                 converter = ColourConverter.Open(duplicator.Device, duplicator.Context,
-                    duplicator.Width, duplicator.Height, tenBit, wanted);
+                    duplicator.Width, duplicator.Height, tenBit, wanted,
+                    tenBit ? DisplayAdaptation.SdrWhiteNits(_output.DeviceName) : null);
             }
 
             var encoder = VideoEncoders.Open(duplicator.Device, _capabilities, _negotiation.Codec,
@@ -1567,6 +1568,31 @@ internal sealed class StreamSession : IDisposable
                     }
                     else if (outcome == ReopenOutcome.Failed)
                     {
+                        if (duplicator.DeviceLost &&
+                            CaptureOnANewDevice(hdr, say: lostInARow == 0) is { } fresh)
+                        {
+                            // Everything made on the dead device goes with it, the card included.
+                            card?.Dispose();
+                            card = null;
+                            converter?.Dispose();
+                            converter = null;
+                            encoder.Dispose();
+                            duplicator.Dispose();
+                            duplicator = fresh;
+
+                            Log.Event("the graphics device was lost (a driver reset or a mode change); " +
+                                      "the capture and the encoder were made again on a new one");
+
+                            var freshTenBit = duplicator.IsHdrDesktop && hdr;
+                            (converter, encoder) = OpenEncoding(duplicator, freshTenBit,
+                                !freshTenBit && _negotiation.Yuv444);
+                            frameInterval = TimeSpan.FromSeconds(1.0 / SendFps(duplicator));
+                            _keyFrameWanted = true;
+                            lostInARow = 0;
+
+                            continue;
+                        }
+
                         if (++lostInARow > MaxLostInARow)
                         {
                             Log.Warn(
@@ -1855,6 +1881,26 @@ internal sealed class StreamSession : IDisposable
             Com.ReleaseAndClear(ref context);
             Com.ReleaseAndClear(ref device);
             Com.ReleaseAndClear(ref adapter);
+        }
+    }
+
+    // A capture on a new graphics device after the old one was removed, or null while Windows is
+    // not ready to give one; the caller asks again and gives up as for any lost desktop.
+    private DesktopDuplicator? CaptureOnANewDevice(bool hdr, bool say)
+    {
+        try
+        {
+            return DesktopDuplicator.Create(_output, preferHdr: hdr);
+        }
+        catch (Exception error)
+        {
+            if (say)
+            {
+                Log.Info("the graphics device was lost and the desktop cannot be opened on a new " +
+                         $"one yet ({error.Message}); asking again");
+            }
+
+            return null;
         }
     }
 

@@ -61,7 +61,7 @@ internal sealed class DisplayAdaptation : IDisposable
         {
             // HDR first: turning advanced color on or off was seen resetting this screen back
             // to its own mode, which would silently undo a resolution change made before it.
-            previousHdr = ApplyHdr(name, wantHdr, canEncodeHdr);
+            previousHdr = ApplyHdr(name, wantHdr, canEncodeHdr, scales);
             previousMode = ApplyMode(name, width, height, fps);
 
             if (scaleForClient)
@@ -229,6 +229,46 @@ internal sealed class DisplayAdaptation : IDisposable
         }
     }
 
+    // At startup, like RestoreLeftoverScales: the HDR switch a stream changed and could not put
+    // back, because the machine was shutting down or the screen had gone. Never throws.
+    internal static void RestoreLeftoverHdr(ScaleStore scales)
+    {
+        foreach (var (deviceName, enabled) in scales.AllHdr())
+        {
+            var state = enabled ? "on" : "off";
+
+            try
+            {
+                var path = FindPath(deviceName);
+                var info = path is null ? null : DisplayControl.ColourInfo(path.Value);
+                if (path is null || info is null)
+                {
+                    Log.Info($"a stream left HDR changed on {deviceName}, and that screen is not " +
+                             $"active now; it is put back {state} at a later start");
+                    continue;
+                }
+
+                if (((info.Value.Value & DisplayControl.AdvancedColorEnabled) != 0) != enabled)
+                {
+                    if (!SetHdrPatiently(path.Value, enabled))
+                    {
+                        Log.Warn($"a stream that did not end left HDR changed on {deviceName}, and it " +
+                                 $"could not be put back {state}; switch it in Settings > Display");
+                        continue;
+                    }
+
+                    Log.Event($"a stream that did not end left HDR changed on {deviceName}; it is back {state}");
+                }
+
+                scales.ForgetHdr(deviceName);
+            }
+            catch (Exception error)
+            {
+                Log.Warn($"the HDR switch a stream left on {deviceName} could not be restored: {error.Message}");
+            }
+        }
+    }
+
     // Changes the mode when a closer one exists, and answers with the one that was replaced —
     // or null when nothing was changed and there is nothing to put back.
     private static DisplayMode? ApplyMode(string deviceName, int width, int height, int fps)
@@ -297,7 +337,7 @@ internal sealed class DisplayAdaptation : IDisposable
 
     // HDR on when the client can show it and the card can encode it in ten bits, off otherwise —
     // an eight-bit stream of an HDR desktop is washed out. Whatever it was is restored at the end.
-    private static bool? ApplyHdr(string deviceName, bool wantHdr, bool canEncodeHdr)
+    private static bool? ApplyHdr(string deviceName, bool wantHdr, bool canEncodeHdr, ScaleStore scales)
     {
         var path = FindPath(deviceName);
         if (path is null) return null;
@@ -346,7 +386,9 @@ internal sealed class DisplayAdaptation : IDisposable
             : "HDR was on and has been turned off for this stream; the screen is put back as it " +
               "was afterwards");
 
-        return enabled;
+        // Written down, and the one kept wins: a shutdown in mid-stream leaves the switch as the
+        // stream set it, and only the next start can put the person's own back.
+        return scales.RememberHdr(deviceName, enabled);
     }
 
     // Like SetPatiently, for HDR. A refusal is read back before it is believed: just after a
@@ -379,7 +421,7 @@ internal sealed class DisplayAdaptation : IDisposable
     {
         try
         {
-            var wasEnabled = ApplyHdr(_deviceName, wantHdr: false, canEncodeHdr: true);
+            var wasEnabled = ApplyHdr(_deviceName, wantHdr: false, canEncodeHdr: true, _scales);
             if (wasEnabled is null) return false;
 
             // Set only if untouched until now: if this session turned HDR on, _previousHdr
@@ -486,6 +528,10 @@ internal sealed class DisplayAdaptation : IDisposable
         return result is DisplayControl.DISP_CHANGE_SUCCESSFUL or DisplayControl.DISP_CHANGE_RESTART;
     }
 
+    // The white of ordinary content on this screen while it is in HDR, in nits, or null.
+    internal static double? SdrWhiteNits(string deviceName) =>
+        FindPath(deviceName) is { } path ? DisplayControl.SdrWhiteNits(path) : null;
+
     // The display-configuration path whose source carries this \\.\DISPLAYn name. The
     // two APIs used here name a screen in completely different ways, and this is the bridge.
     private static DisplayControl.PathInfo? FindPath(string deviceName)
@@ -536,10 +582,13 @@ internal sealed class DisplayAdaptation : IDisposable
                 var step = Stopwatch.StartNew();
                 var path = FindPath(_deviceName);
                 if (path is not null && SetHdrPatiently(path.Value, hdr))
+                {
+                    _scales.ForgetHdr(_deviceName);
                     Log.Info($"HDR restored in {step.ElapsedMilliseconds} ms");
+                }
                 else
-                    Log.Warn($"HDR could not be put back {(hdr ? "on" : "off")}; switch it in " +
-                             "Settings > Display");
+                    Log.Warn($"HDR could not be put back {(hdr ? "on" : "off")} now (a shutdown, or the " +
+                             "screen is away); it is put back when this server next starts");
             }
 
             if (_previousScale is { } scale)

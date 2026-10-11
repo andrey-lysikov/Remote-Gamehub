@@ -218,6 +218,10 @@ internal static unsafe class D3D11
         ((delegate* unmanaged[Stdcall]<void*, void*, void**, uint, void>)Com.VTable(context)[11])(
             context, shader, null, 0);
 
+    // ID3D11Device slot 39: GetDeviceRemovedReason. S_OK while the device is alive.
+    internal static int GetDeviceRemovedReason(void* device) =>
+        ((delegate* unmanaged[Stdcall]<void*, int>)Com.VTable(device)[39])(device);
+
     // ID3D11DeviceContext slot 13: Draw
     internal static void Draw(void* context, uint vertices) =>
         ((delegate* unmanaged[Stdcall]<void*, uint, uint, void>)Com.VTable(context)[13])(

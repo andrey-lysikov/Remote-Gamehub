@@ -50,6 +50,7 @@ internal static unsafe class DisplayControl
     internal const uint DEVICE_INFO_GET_SOURCE_NAME = 1;
     internal const uint DEVICE_INFO_GET_ADVANCED_COLOR_INFO = 9;
     internal const uint DEVICE_INFO_SET_ADVANCED_COLOR_STATE = 10;
+    internal const uint DEVICE_INFO_GET_SDR_WHITE_LEVEL = 11;
 
     private const int ERROR_SUCCESS = 0;
 
@@ -115,6 +116,14 @@ internal static unsafe class DisplayControl
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    internal struct SdrWhiteLevel
+    {
+        internal DeviceInfoHeader Header;
+        // In thousandths of eighty nits: 1000 is 80 nits, 3000 is 240.
+        internal uint Level;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     internal struct SetAdvancedColorState
     {
         internal DeviceInfoHeader Header;
@@ -171,6 +180,9 @@ internal static unsafe class DisplayControl
 
     [DllImport("user32.dll")]
     private static extern int DisplayConfigGetDeviceInfo(ref AdvancedColorInfo request);
+
+    [DllImport("user32.dll")]
+    private static extern int DisplayConfigGetDeviceInfo(ref SdrWhiteLevel request);
 
     [DllImport("user32.dll")]
     private static extern int DisplayConfigSetDeviceInfo(ref SetAdvancedColorState request);
@@ -237,6 +249,27 @@ internal static unsafe class DisplayControl
         };
 
         return DisplayConfigGetDeviceInfo(ref request) == ERROR_SUCCESS ? request : null;
+    }
+
+    // How bright an HDR screen draws the white of ordinary content, in nits ("SDR content
+    // brightness" in Settings); null when Windows will not say.
+    internal static double? SdrWhiteNits(in PathInfo path)
+    {
+        var request = new SdrWhiteLevel
+        {
+            Header = new DeviceInfoHeader
+            {
+                Type = DEVICE_INFO_GET_SDR_WHITE_LEVEL,
+                Size = (uint)Marshal.SizeOf<SdrWhiteLevel>(),
+                AdapterIdLow = path.TargetAdapterIdLow,
+                AdapterIdHigh = path.TargetAdapterIdHigh,
+                Id = path.TargetId,
+            },
+        };
+
+        return DisplayConfigGetDeviceInfo(ref request) == ERROR_SUCCESS && request.Level > 0
+            ? request.Level / 1000.0 * 80.0
+            : null;
     }
 
     internal static bool SetColourState(in PathInfo path, bool enabled)

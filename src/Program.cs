@@ -393,6 +393,7 @@ internal static class Program
         // leaves Windows keeping that stream's scale, and only this puts the person's own back.
         var scales = new ScaleStore(database);
         DisplayAdaptation.RestoreLeftoverScales(scales);
+        DisplayAdaptation.RestoreLeftoverHdr(scales);
         var mouseKeys = new MouseKeys(database);
         mouseKeys.RestoreLeftover();
         var clients = new ClientStore(database);

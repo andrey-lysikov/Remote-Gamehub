@@ -343,6 +343,24 @@ internal sealed class Database : IDisposable
             version = 17;
         }
 
+        if (version < 18)
+        {
+            // Whether HDR was on before a stream switched it, per screen. Windows keeps the switch
+            // across a restart, so a row still here at a start is a restore owed (see ScaleStore).
+            Execute(_connection,
+                """
+                BEGIN;
+                CREATE TABLE display_hdr (
+                    device  TEXT    PRIMARY KEY,  -- \\.\DISPLAYn
+                    enabled INTEGER NOT NULL      -- 1 when HDR was on and goes back on
+                );
+                PRAGMA user_version = 18;
+                COMMIT;
+                """);
+
+            version = 18;
+        }
+
         Log.Info(from == version
             ? $"database {Path}, schema version {version}"
             : $"database {Path}, schema migrated from version {from} to {version}");

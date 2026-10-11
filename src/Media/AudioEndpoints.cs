@@ -209,6 +209,7 @@ internal sealed unsafe class AudioAdaptation : IDisposable
         {
             enumerator = Wasapi.CreateDeviceEnumerator();
             wanted = AudioEndpoints.Find(enumerator, SurroundDevice);
+            if (wanted is null) wanted = InstallSurroundDevice(enumerator);
 
             if (wanted is null)
             {
@@ -216,7 +217,8 @@ internal sealed unsafe class AudioAdaptation : IDisposable
                     $"The client asked for {channels} audio channels and \"{SurroundDevice}\" is not\n" +
                     "on this machine, so the sound stays where it is and goes out with the channels\n" +
                     "the default device mixes into — two, on an HDMI output to a screen.\n" +
-                    "What to do: that device comes with Steam, so installing Steam adds it. Any other\n" +
+                    "What to do: that device comes with Steam, and this server adds it from Steam's own\n" +
+                    "driver when Steam is installed; the lines above say if that was tried. Any other\n" +
                     "device set to 5.1 in Windows' sound settings and made the default does as well.");
                 return new AudioAdaptation();
             }
@@ -293,6 +295,65 @@ internal sealed unsafe class AudioAdaptation : IDisposable
 
     // The default playback device, set for all three of Windows' roles — console, multimedia and
     // communications — because "the default device" means all three to the person who set it.
+    // Steam ships the driver but adds the device only when its own Remote Play first streams.
+    private static readonly string SurroundDriver = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86),
+        "Steam", "drivers", "Windows10", "x64", "SteamStreamingSpeakers.inf");
+
+    // Once per run: a driver Windows would not take is not taken on the next stream either.
+    private static bool _surroundInstallTried;
+
+    // Adds the surround device from Steam's driver, as Sunshine does, and answers with it or null.
+    // Windows makes a new device the default; the sound is put back where it was.
+    private static void* InstallSurroundDevice(void* enumerator)
+    {
+        if (_surroundInstallTried) return null;
+        _surroundInstallTried = true;
+
+        if (!File.Exists(SurroundDriver))
+        {
+            Log.Info($"\"{SurroundDevice}\" cannot be added: Steam's driver is not at {SurroundDriver}");
+            return null;
+        }
+
+        var before = AudioEndpoints.Default(enumerator);
+        var beforeId = before is null ? null : Wasapi.GetDeviceId(before);
+        Com.Release(before);
+
+        if (SetupApi.InstallDriver(SurroundDriver) is { } refusal)
+        {
+            Log.Warn($"\"{SurroundDevice}\" could not be added from Steam's driver: {refusal}\n" +
+                     "What to do: start a Remote Play stream from Steam once, which installs it.");
+            return null;
+        }
+
+        // The audio service takes a few seconds to show a device whose driver was just installed.
+        void* device = null;
+        for (var attempt = 0; attempt < 40 && device is null; attempt++)
+        {
+            Thread.Sleep(250);
+            device = AudioEndpoints.Find(enumerator, SurroundDevice);
+        }
+
+        if (device is null)
+        {
+            Log.Warn($"Steam's driver was installed, but \"{SurroundDevice}\" has not appeared; " +
+                     "it may need a restart of this machine");
+            return null;
+        }
+
+        Log.Event($"\"{SurroundDevice}\" was missing and has been added from Steam's driver");
+
+        var after = AudioEndpoints.Default(enumerator);
+        var afterId = after is null ? null : Wasapi.GetDeviceId(after);
+        Com.Release(after);
+
+        if (beforeId is not null && !string.Equals(beforeId, afterId, StringComparison.OrdinalIgnoreCase))
+            MoveTo(beforeId);
+
+        return device;
+    }
+
     private static bool MoveTo(string deviceId)
     {
         void* policy = null;

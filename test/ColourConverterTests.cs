@@ -29,6 +29,20 @@ public class ColourConverterTests
         }
     }
 
+    [Fact]
+    public void An_hdr_shader_that_knows_sdr_white_puts_it_on_gamma_2_2_and_compiles()
+    {
+        var colour = new YuvColour(YuvColour.Rec2020, false);
+        var source = ColourConverter.Hlsl(true, colour, sdrWhiteNits: 240);
+
+        // 240 nits is three times scRGB's eighty; without the level nothing is redone.
+        Assert.Contains("static const float white = 3;", source);
+        Assert.DoesNotContain("static const float white", ColourConverter.Hlsl(true, colour));
+        Assert.DoesNotContain("static const float white", ColourConverter.Hlsl(false, colour, sdrWhiteNits: 240));
+
+        Assert.NotEmpty(D3DCompiler.Compile(source, "luma", "ps_5_0"));
+    }
+
     // White is 940 of 1023 (235 of 255) in limited range and the top code in full, and neutral
     // chroma is the middle of the range either way. All as codes over the top code, as unorm takes.
     [Theory]

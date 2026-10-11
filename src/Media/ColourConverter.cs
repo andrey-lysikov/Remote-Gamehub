@@ -62,6 +62,9 @@ internal sealed unsafe class ColourConverter : IDisposable
     private readonly bool _hdr;
     private readonly YuvColour _colour;
 
+    // Where Windows put the white of ordinary content on the HDR desktop, or null if unknown.
+    private readonly double? _sdrWhiteNits;
+
     internal int Width { get; }
     internal int Height { get; }
 
@@ -69,8 +72,9 @@ internal sealed unsafe class ColourConverter : IDisposable
     internal nint Output => (nint)_output;
 
     private ColourConverter(void* device, void* context, int width, int height, bool hdr,
-                            YuvColour colour)
+                            YuvColour colour, double? sdrWhiteNits)
     {
+        _sdrWhiteNits = sdrWhiteNits;
         _device = device;
         _context = context;
         Width = width;
@@ -82,9 +86,10 @@ internal sealed unsafe class ColourConverter : IDisposable
     // Builds the shader for one stream. Width and height must be even: a chroma sample covers two
     // pixels each way, and the duplication never hands back an odd desktop.
     internal static ColourConverter Open(nint device, nint context, int width, int height,
-                                         bool hdr, YuvColour colour)
+                                         bool hdr, YuvColour colour, double? sdrWhiteNits = null)
     {
-        var converter = new ColourConverter((void*)device, (void*)context, width, height, hdr, colour);
+        var converter = new ColourConverter((void*)device, (void*)context, width, height, hdr, colour,
+                                            sdrWhiteNits);
 
         try
         {
@@ -92,6 +97,14 @@ internal sealed unsafe class ColourConverter : IDisposable
             Log.Info(hdr
                 ? $"the HDR desktop is converted to ten-bit BT.2020 PQ, {colour.Name}, before it is encoded"
                 : $"the desktop is converted to eight-bit {colour.Name} before it is encoded");
+            if (hdr)
+            {
+                Log.Info(sdrWhiteNits is { } white
+                    ? $"ordinary (SDR) content is drawn up to {white:0} nits on this HDR screen; below that the " +
+                      "picture is put on gamma 2.2, as a screen shows it, instead of Windows' sRGB curve"
+                    : "Windows did not say how bright it draws ordinary (SDR) content on this HDR screen, " +
+                      "so its sRGB curve is left as it is: dark parts of an SDR game look lighter than they should");
+            }
             return converter;
         }
         catch
@@ -169,7 +182,7 @@ internal sealed unsafe class ColourConverter : IDisposable
 
     private void Build()
     {
-        var source = Hlsl(_hdr, _colour);
+        var source = Hlsl(_hdr, _colour, _sdrWhiteNits);
 
         var vertex = D3DCompiler.Compile(source, "vs", "vs_5_0");
         var luma = D3DCompiler.Compile(source, "luma", "ps_5_0");
@@ -255,8 +268,11 @@ internal sealed unsafe class ColourConverter : IDisposable
 
     // The whole shader, written with this stream's numbers in it rather than fed a constant
     // buffer: it is built once per stream, and the arithmetic is then plain to read in the source.
-    internal static string Hlsl(bool hdr, YuvColour colour)
+    internal static string Hlsl(bool hdr, YuvColour colour, double? sdrWhiteNits = null)
     {
+        // SDR white in scRGB units, where 1.0 is eighty nits; zero leaves the picture as composed.
+        var sdrWhite = hdr && sdrWhiteNits is { } nits ? nits / ScRgbWhiteNits : 0.0;
+
         var bits = hdr ? 10 : 8;
         var codes = (1 << bits) - 1.0;
         var (y, u, v) = Vectors(bits, colour);
@@ -305,10 +321,35 @@ internal sealed unsafe class ColourConverter : IDisposable
                 return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4);
             }
 
+            float3 toSrgb(float3 c)
+            {
+                return c <= 0.0031308 ? c * 12.92 : 1.055 * pow(c, 1 / 2.4) - 0.055;
+            }
+
+            #if {{(sdrWhite > 0 ? 1 : 0)}}
+            // Windows composes ordinary content through the sRGB curve, and a screen shows it on
+            // gamma 2.2: up to SDR white each channel is taken back to its code and decoded again.
+            float3 asAScreenShows(float3 rgb)
+            {
+                static const float white = {{Number(sdrWhite)}};
+
+                float3 part = rgb / white;
+                float3 again = pow(toSrgb(saturate(part)), 2.2) * white;
+                return part > 0 && part < 1 ? again : rgb;
+            }
+            #else
+            float3 asAScreenShows(float3 rgb)
+            {
+                return rgb;
+            }
+            #endif
+
             #if {{(hdr ? 1 : 0)}}
             // scRGB is linear on Rec. 709 primaries; Rec. 2100 wants Rec. 2020 primaries and PQ.
             float3 encode(float3 rgb)
             {
+                rgb = asAScreenShows(rgb);
+
                 static const float3x3 toRec2020 =
                 {
                     0.627402, 0.329292, 0.043306,

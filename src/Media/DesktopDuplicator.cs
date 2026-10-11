@@ -121,6 +121,10 @@ internal sealed unsafe class DesktopDuplicator : IDisposable
     // The device the frame belongs to. The encoder has to be created on this one.
     internal nint Device => (nint)_device;
 
+    // A driver reset or a card that dropped out: nothing made on this device works again, and
+    // Reopen cannot help. The capture has to be made anew.
+    internal bool DeviceLost => _device is not null && D3D11.GetDeviceRemovedReason(_device) != 0;
+
     internal nint Context => (nint)_context;
 
     private DesktopDuplicator(DisplayOutput output, bool preferHdr)

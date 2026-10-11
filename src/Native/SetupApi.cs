@@ -22,6 +22,17 @@ internal static unsafe class SetupApi
         internal nint Reserved;
     }
 
+    [DllImport("newdev.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DiInstallDriverW(nint parent, string infPath, uint flags,
+                                                [MarshalAs(UnmanagedType.Bool)] out bool needReboot);
+
+    // Installs a driver package from its .inf, without a window; null when done, else the reason.
+    internal static string? InstallDriver(string infPath) =>
+        DiInstallDriverW(0, infPath, 0, out _)
+            ? null
+            : new Win32Exception(Marshal.GetLastWin32Error()).Message;
+
     [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern nint SetupDiGetClassDevsW(Guid* classGuid, nint enumerator, nint parent, int flags);
 
