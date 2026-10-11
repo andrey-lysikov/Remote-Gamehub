@@ -35,12 +35,18 @@ public class ColourConverterTests
         var colour = new YuvColour(YuvColour.Rec2020, false);
         var source = ColourConverter.Hlsl(true, colour, sdrWhiteNits: 240);
 
+        // The text of both branches is always there; the preprocessor switch is what differs.
+        const string on = @"#if 1\s+// Windows composes";
+        const string off = @"#if 0\s+// Windows composes";
+
         // 240 nits is three times scRGB's eighty; without the level nothing is redone.
         Assert.Contains("static const float white = 3;", source);
-        Assert.DoesNotContain("static const float white", ColourConverter.Hlsl(true, colour));
-        Assert.DoesNotContain("static const float white", ColourConverter.Hlsl(false, colour, sdrWhiteNits: 240));
+        Assert.Matches(on, source);
+        Assert.Matches(off, ColourConverter.Hlsl(true, colour));
+        Assert.Matches(off, ColourConverter.Hlsl(false, colour, sdrWhiteNits: 240));
 
         Assert.NotEmpty(D3DCompiler.Compile(source, "luma", "ps_5_0"));
+        Assert.NotEmpty(D3DCompiler.Compile(source, "chroma", "ps_5_0"));
     }
 
     // White is 940 of 1023 (235 of 255) in limited range and the top code in full, and neutral
