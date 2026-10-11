@@ -4,7 +4,7 @@
 <title>{{name}}</title>
 <style>{{style}}</style>
 
-<header><img id=mark src="/?icon=1" alt=""><div><div class=titlerow><h1>{{name}} <span class=v>v{{version}}</span></h1><span class=meta id=host>{{host}}</span><span class="meta gh"><span id=update>{{update}}</span> <span class=dot>·</span> <a href="{{project}}" target=_blank rel=noopener>GitHub</a></span></div><p id=status>{{status}}</p></div></header>
+<header><img id=mark src="/?icon=1" alt=""><div><div class=titlerow><h1>{{name}} <span class=v>v{{version}}</span></h1><span class="meta gh"><span id=update>{{update}}</span> <span class=dot>·</span> <a href="{{project}}" target=_blank rel=noopener>GitHub</a></span></div><div class=inforow><span id=host>{{host}}</span><span id=status>{{status}}</span></div></div></header>
 
 <section id=pair class="card{{pairclass}}">
 <p id=who>{{who}}</p>
@@ -50,6 +50,13 @@
 <div class="row end"><button value=no id=confirmno>[[Cancel]]</button><button value=yes class=danger>[[Yes]]</button></div>
 </form></dialog>
 
+<dialog id=renamer class=confirm><form method=dialog>
+<label>[[What to call this device]]<input id=newname maxlength=48 autocomplete=off></label>
+<div class="row end"><button type=button id=renamecancel>[[Cancel]]</button><button value=yes class=primary>[[Save]]</button></div>
+</form></dialog>
+
+<input type=file id=backupfile accept=".zip,application/zip" hidden>
+
 <dialog id=picker>
 <div class=row><input id=pickname placeholder="[[The name to look for]]"><button type=button id=picksearch class=primary>[[Search]]</button></div>
 <p id=picksaid class=q></p>
@@ -62,7 +69,7 @@
 <section class=pane id=pane-connections hidden><div class=main><pre id=connlog></pre><div id=blocked class=banrow>{{blocked}}</div></div><div id=clients class=side>{{clients}}</div></section>
 <section class=pane id=pane-screen hidden><div id=shot title="[[Open full screen]]"><img id=shotimg alt=""><span id=shotsaid>[[Nothing is running.]]</span><button type=button id=shotclose>[[Close]]</button></div><pre id=output></pre></section>
 </div>
-<nav id=diagbar><span>[[Diagnostics]]</span><button type=button data-pane=log>[[Server log]]</button><button type=button data-pane=connections>[[Connections]]</button><button type=button data-pane=screen>[[Screen]]</button><div id=hosttools><span id=scansaid class=q></span><button type=button id=rescan>[[Rescan games]]</button><i class=sep></i><button type=button data-power=restart class=danger>[[Restart host]]</button><button type=button data-power=shutdown class=danger>[[Shut down host]]</button></div></nav>
+<nav id=diagbar><button type=button data-pane=log title="[[Server log]]" aria-label="[[Server log]]"><svg viewBox="0 0 24 24" aria-hidden=true><path d="M6 3h9l4 4v14H6z"/><path d="M9 9h3M9 13h7M9 17h7"/></svg></button><button type=button data-pane=connections title="[[Connections]]" aria-label="[[Connections]]"><svg viewBox="0 0 24 24" aria-hidden=true><rect x=2 y=5 width=13 height=10 rx=1.5 /><path d="M6 19h6"/><rect x=17 y=9 width=5 height=11 rx=1.5 /></svg></button><button type=button data-pane=screen title="[[Screen]]" aria-label="[[Screen]]"><svg viewBox="0 0 24 24" aria-hidden=true><rect x=3 y=4 width=18 height=12 rx=1.5 /><path d="M8 20h8M12 16v4"/></svg></button><span id=scansaid class=q></span><div id=hosttools><button type=button id=rescan title="[[Rescan games]]" aria-label="[[Rescan games]]"><svg viewBox="0 0 24 24" aria-hidden=true><path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/></svg></button><i class=sep></i><button type=button data-power=restart class=danger title="[[Restart host]]" aria-label="[[Restart host]]"><svg viewBox="0 0 24 24" aria-hidden=true><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></button><button type=button data-power=shutdown class=danger title="[[Shut down host]]" aria-label="[[Shut down host]]"><svg viewBox="0 0 24 24" aria-hidden=true><path d="M12 3v9"/><path d="M6.6 6.6a8 8 0 1 0 10.8 0"/></svg></button></div></nav>
 </footer>
 <script>{{script}}</script>
 

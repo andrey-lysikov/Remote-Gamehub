@@ -206,9 +206,28 @@ if(button.dataset.do==='stop'){
 if(!await ask(f('[[Stop {0}?]]',tile.dataset.title)))return;
 await fetch('/?stop=1');await reload();}});
 
+const backupfile=$('backupfile');
+backupfile.addEventListener('change',async()=>{
+if(!backupfile.files.length)return;const blob=backupfile.files[0];backupfile.value='';
+if(!await ask(f('[[Restore from {0}? Its devices are added to the list. If its host certificate is another one, the server restarts with it, and devices paired with the current one will have to pair again.]]',blob.name)))return;
+try{scansaid.textContent=await (await fetch('/?importclients=1',{method:'POST',body:blob})).text();}
+catch{scansaid.textContent='[[The host did not answer.]]';}
+setTimeout(()=>{scansaid.textContent='';},10000);
+await reloadClients();});
+const renamer=$('renamer'),newname=$('newname');
+$('renamecancel').addEventListener('click',()=>renamer.close());
 clients.addEventListener('click',async e=>{
-const button=e.target.closest('button[data-do=forget]');if(!button)return;
+const button=e.target.closest('button[data-do]');if(!button)return;
+if(button.dataset.do==='export'){
+if(await ask('[[The backup holds the paired devices and the private key of this host. Whoever has the file can pose as this host, so keep it to yourself. Save it?]]'))location.href='/?exportclients=1';return;}
+if(button.dataset.do==='import'){backupfile.click();return;}
 const row=button.closest('.client');
+if(button.dataset.do==='rename'){const id=row.dataset.id,old=row.dataset.name;
+newname.value=old;renamer.returnValue='';renamer.showModal();newname.select();
+renamer.addEventListener('close',async()=>{const name=newname.value.trim();
+if(renamer.returnValue!=='yes'||!name||name===old)return;
+await fetch('/?rename='+id+'&name='+encodeURIComponent(name));
+await reloadClients();},{once:true});return;}
 if(!await ask(f('[[Forget {0}? It will have to pair again.]]',row.dataset.name)))return;
 await fetch('/?forget='+row.dataset.id);
 await reloadClients();});

@@ -25,15 +25,15 @@ align-items:center}
 header>div{min-width:0;flex:1}
 h1{font-size:1.05rem;margin:0;font-weight:600}
 .v{color:var(--faint);font-weight:400}
-.meta{margin-left:.6rem;font-size:12px;font-weight:400;color:var(--faint)}
+.meta{font-size:12px;font-weight:400;color:var(--faint)}
 .meta a{color:var(--meta-link);text-decoration:none}
 .meta a:hover{color:var(--ink);text-decoration:underline}
-#status{margin:.35rem 0 0;color:var(--dim);font-size:13px;
-white-space:nowrap;overflow:auto;scrollbar-width:none}
-.titlerow{display:flex;align-items:baseline;min-width:0}
-.titlerow h1{flex:none}
-#host{flex:1;min-width:0;overflow:auto;scrollbar-width:none;white-space:nowrap}
-.titlerow .gh{flex:none}
+.titlerow{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:0 .6rem}
+.inforow{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem 1rem;margin-top:.35rem;
+color:var(--dim);font-size:13px}
+#host{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem .7rem}
+#status{min-width:0}
+.chip{display:inline-flex;align-items:center;gap:.25rem;white-space:nowrap;vertical-align:middle}
 #status span.live{color:var(--live)}
 #update a.update{color:var(--live);font-weight:600;text-decoration:none;
 border:1px solid var(--green-line);border-radius:.3rem;padding:.05rem .45rem}
@@ -87,12 +87,15 @@ aspect-ratio:3/4;border:0;background:none;color:var(--faint);cursor:pointer}
 .game.add span{font-size:12px}
 
 #clients h2,#blocked h2{font-size:13px;font-weight:500;color:var(--dim);margin:0 0 .6rem}
+#clients h2{display:flex;align-items:center;gap:.4rem}
+#clients h2 span{flex:1}
+#clients h2 button{padding:.3rem;line-height:0;flex:none}
 .client{display:flex;align-items:center;gap:.6rem;padding:.55rem .75rem;
 border:1px solid var(--line);border-radius:.45rem;margin-bottom:.4rem;
 background:var(--panel)}
 .client b{font-weight:500;font-size:13px}
 .client .q{flex:1;font-size:11px;min-height:0}
-.client button{padding:.3rem;line-height:0}
+.client button{padding:.3rem;line-height:0;flex:none}
 
 
 button,.upload{font:inherit;font-size:13px;padding:.35rem .8rem;border-radius:.35rem;
@@ -195,11 +198,13 @@ font-size:12px;color:var(--log-ink);white-space:pre-wrap;word-break:break-word}
 #diag .side{flex:0 1 26rem;max-width:40%;overflow:auto;padding:1rem;box-sizing:border-box;
 border-left:1px solid var(--line)}
 #diagbar{display:flex;align-items:center;gap:.3rem;padding:.35rem 1rem;flex-wrap:wrap}
-#diagbar span{font-size:12px;color:var(--dim);margin-right:.5rem}
-#diagbar button{font-size:12px;padding:.2rem .7rem;color:var(--dim)}
+#scansaid{flex:1;min-width:0;font-size:12px;text-align:right;margin:0 .5rem}
+#diagbar button{padding:.4rem .6rem;line-height:0;color:var(--dim)}
+#diagbar svg{width:18px;height:18px}
+#diagbar button.danger{color:var(--danger-line)}
 #diagbar button[hidden]{display:none}
 #diagbar button.on{background:var(--primary);border-color:var(--primary-line);color:var(--ink)}
-#hosttools{margin-left:auto;display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
+#hosttools{margin-left:auto;display:flex;align-items:center;gap:.3rem}
 #hosttools .sep{width:1px;height:1.1rem;background:var(--line);margin:0 .3rem}
 #shot{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;padding:.5rem}
 #pane-screen.with-output #shot{flex:0 0 40%;border-right:1px solid var(--line)}
@@ -215,5 +220,7 @@ border-left:1px solid var(--line)}
 cursor:default}
 #shot.full #shotclose{display:block;position:absolute;top:.75rem;right:1rem}
 @media (max-width:40rem){#diag .pane{flex-direction:column}
+#scansaid{order:-1;flex-basis:100%;text-align:left;margin:0}
+#scansaid:empty{display:none}
 #diag .side{flex-basis:auto;max-width:none;border-left:0;border-top:1px solid var(--line)}
 #pane-screen.with-output #shot{flex-basis:40%;border-right:0;border-bottom:1px solid var(--line)}}
